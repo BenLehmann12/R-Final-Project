@@ -1,0 +1,641 @@
+---
+title: "FinalProject"
+author: "Ben Lehmann"
+date: "2024-12-10"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+There are 32 Variables in the Breast Cancer Dataset, but we are not going to be using all of them, I decided to pick 6 variables I will be using 6 variables, (perimeter_mean, area_mean, radius_mean, texture_mean, smoothness_mean, compactness_mean) they are the means of the dataset.
+I will be using terms of the 6 variables by themselves (Hotelling, Shapiro, Clustering, PCA, K-Means,Logistic and Tree)
+
+Continuous Variables -perimeter_mean, area_mean, radius_mean, texture_mean, smoothness_mean, compactness_mean
+
+Categorical variable - Diagnoses (M or B)
+
+Let's ask Some Questions
+
+1.  Are the mean values of selected features (perimeter_mean, area_mean, radius_mean, texture_mean, smoothness_mean, compactness_mean) significantly different between benign (B) and malignant (M) diagnoses?
+
+2.  Can we identify groups of cancer diagnoses (M = Malignant, B = Benign) using clustering methods based on selected variables and how many clusters?
+
+3.  Are the mean values of selected features (perimeter_mean, area_mean, radius_mean, texture_mean, smoothness_mean, compactness_mean) normally distributed?
+    Are they normally distributed by diagnoses?
+
+4.  Can we reduce the dimensionality of the dataset of the 6 variables using PCA, and which variables and which PCA contribute the most to the variation of our dataset?
+
+5.  Which classification method performs better at predicting the diagnosis type with these 6 variables?
+
+```{r}
+library(tidyr)
+library(tidyverse)
+cancer <- read.csv('data.csv')
+cancer <- cancer %>% select(-X)
+malignant <- cancer %>% filter(diagnosis == "M")
+benign <- cancer %>% filter(diagnosis == "B")
+```
+
+Visualize the Data
+
+```{r}
+library(ggplot2)
+ggplot(cancer, aes(x = diagnosis, y = radius_mean)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Radius Mean by Diagnosis", x = "Diagnosis", y = "Radius Mean")
+```
+
+```{r}
+library(ggplot2)
+ggplot(cancer, aes(x = diagnosis, y = texture_mean)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Radius Mean by Diagnosis", x = "Diagnosis", y = "Radius Mean")
+```
+
+```{r}
+library(reshape2)
+melted_data <- melt(cancer, id.vars = "diagnosis", measure.vars = c("radius_mean", "texture_mean", "perimeter_mean", "area_mean", "smoothness_mean", "compactness_mean"))
+
+
+```
+
+Lets create a Full on Graph based on diagnosis of each variable, get a little better picture
+
+```{r}
+library(ggplot2)
+ggplot(melted_data, aes(x = diagnosis, y = value, fill = diagnosis)) +
+  geom_boxplot() +
+  facet_wrap(~ variable, scales = "free") +
+  labs(x = "Diagnosis", y = "Value") +
+  theme_minimal()
+```
+
+```{r}
+variables <- c("radius_mean", "texture_mean", "perimeter_mean", "area_mean", "smoothness_mean", "compactness_mean")
+
+# Create a function to generate the plots
+plot_variable <- function(var) {
+  ggplot(cancer, aes_string(x = var, fill = "diagnosis")) +
+    geom_density(alpha = 0.5) +
+    labs(title = paste("Distribution of", var, "by Diagnosis"), x = var, y = "Density") +
+    theme_minimal()
+}
+
+# Generate the plots and use facet_wrap
+plots <- lapply(variables, plot_variable)
+plots
+```
+
+Clustering
+
+We will look for the number of clusters for our 6 variables
+
+```{r}
+library(factoextra)
+library(cluster)
+```
+
+```{r}
+df_scaled<- scale(cancer[,3:8])
+df_scaled=as.data.frame(df_scaled)
+```
+
+```{r}
+distance_matrix <- dist(df_scaled, method = "euclidean")
+```
+
+```{r}
+fviz_nbclust(df_scaled, kmeans, method = "wss")
+```
+
+We can use 2 clusters
+
+```{r}
+set.seed(1)
+
+#perform k-means clustering with k = 4 clusters
+km <- kmeans(df_scaled, centers = 2, nstart = 25)
+```
+
+```{r}
+fviz_cluster(km, data = df_scaled)
+```
+
+```{r}
+diagnosis <- as.numeric(cancer$diagnosis == "M")
+```
+
+```{r}
+table(km$cluster,cancer$diagnosis)
+```
+
+So, not bad and the 2 clusters do a good job separating between the benign and malignant data from our new dataset of 6 variables.
+
+Classification (We are using the Whole Dataset but use those 6 variables are the Independent Variables and Diagnosis as the Response)
+
+```{r}
+new_cancer <- cancer %>% mutate(diagnosis_numeric = ifelse(diagnosis == "M", 1, 0))
+```
+
+```{r}
+set.seed(3011) 
+train_index <- sample(nrow(new_cancer), size = round(0.75 * nrow(new_cancer)), replace = FALSE)
+train <- cancer[train_index,]
+test <- cancer[-train_index,]
+```
+
+Logistic Regression
+
+```{r}
+LogMod <- glm(diagnosis_numeric~radius_mean + texture_mean + perimeter_mean + area_mean + smoothness_mean + compactness_mean,data=new_cancer,family = binomial)
+
+```
+
+```{r}
+summary(LogMod)
+```
+
+```{r}
+CancerClass <- as.numeric(predict(LogMod) > 0)
+table(new_cancer$diagnosis_numeric, CancerClass)
+```
+
+Classification Tree
+
+```{r}
+tree_data <- cancer
+```
+
+```{r}
+tree_cancer <-  tree_data %>% mutate(diagnosis_numeric = ifelse(diagnosis == "M", 1, 0))
+```
+
+```{r}
+tree_data$diagnosis <- as.factor(tree_data$diagnosis)
+
+tree_cancer$diagnosis_numeric[tree_cancer$diagnosis_numeric == 0] <- "Benign"
+tree_cancer$diagnosis_numeric[tree_cancer$diagnosis_numeric == 1] <- "Malignant"
+tree_cancer$diagnosis_numeric <- as.factor(tree_cancer$diagnosis_numeric)
+
+```
+
+```{r}
+library(rpart)
+```
+
+```{r}
+set.seed(123)
+
+tree_mod <- rpart(diagnosis_numeric~radius_mean + texture_mean + perimeter_mean + area_mean + smoothness_mean + compactness_mean,data=tree_cancer,cp = 0.0001)
+
+summary(tree_mod)
+
+```
+
+```{r}
+library(rpart.plot)
+rpart.plot(tree_mod, extra = 1, fallen.leaves = F, digits = 4, roundint = F, main = "BPD Classification Tree")
+```
+
+```{r}
+tree_prob <- predict(tree_mod)                  
+tree_class <- predict(tree_mod, type = "class")  
+table(tree_cancer$diagnosis_numeric, tree_class)
+```
+
+```{r}
+print(tree_mod,digits = 2)
+```
+
+i).
+
+Using Hotelling T2 test to see if the means are different based on Diagnosis
+
+```{r}
+library(DescTools)
+cancerM <- cancer[cancer$diagnosis == "M", 3:8]
+cancerB <- cancer[cancer$diagnosis == "B", 3:8]
+```
+
+```{r}
+n1 <- nrow(cancerM)
+n2 <- nrow(cancerB)
+p <- ncol(cancerM)
+t2test <- HotellingsT2Test(cancerM, cancerB)
+t2test
+t2test$statistic * p * (n1 + n2 - 2) / (n1 + n2 - p - 1)
+```
+
+Test for Normality using Shapiro-Wilks Test (Overall with the 6 variables regardless of diagnoses)
+
+```{r}
+library(mvShapiroTest)
+new_Cancer <- cancer[,3:8]
+sapply(colnames(new_Cancer), function(x) {
+               shapiro.test(new_Cancer[[x]]) } )
+```
+
+```{r}
+library(mvShapiroTest)
+apply(new_Cancer, 2, shapiro.test)
+```
+
+
+
+```{r}
+library(mvShapiroTest)
+
+mvShapiro.Test(as.matrix(new_Cancer))
+```
+
+```{r}
+layout(matrix(1:6, nc=2))
+sapply(colnames(new_Cancer), 
+       function(x){
+         qqnorm(new_Cancer[[x]], main="x")
+         qqline(new_Cancer[[x]])
+       })
+```
+
+Shapiro Test with Diagnoses = "B"
+
+```{r}
+par(mfrow=c(3,3),pch=1)     
+for (i in 1:6){
+  qqnorm(cancerB[,i],  main="Normal Q-Q Plot") }
+```
+
+```{r}
+library(mvShapiroTest)
+apply(cancerB, 2, shapiro.test)
+```
+
+```{r}
+library(mvShapiroTest)
+sapply(colnames(cancerB), function(x) {
+               shapiro.test(cancerB[[x]]) } )
+```
+
+```{r}
+library(mvShapiroTest)
+
+mvShapiro.Test(as.matrix(cancerB))
+```
+
+Shapiro Test with Diagnoses == "M"
+
+```{r}
+par(mfrow=c(3,3),pch=1)     
+for (i in 1:6){
+  qqnorm(cancerM[,i],  main="Normal Q-Q Plot") }
+```
+
+```{r}
+library(mvShapiroTest)
+apply(cancerM, 2, shapiro.test)
+```
+
+```{r}
+library(mvShapiroTest)
+sapply(colnames(cancerM), function(x) {
+               shapiro.test(cancerM[[x]]) } )
+```
+
+```{r}
+mvShapiro.Test(as.matrix(cancerM))
+```
+
+PCA
+
+```{r}
+cancerPCA <- prcomp(cancer[,3:8], scale. = T, center = T)
+summary(cancerPCA)
+```
+
+```{r}
+round(cancerPCA$rotation,4)
+```
+
+```{r}
+library(ggplot2)
+ggplot(data.frame(x = 1:6, y = cancerPCA$sdev^2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "No. of PCs", y = "Component Variance (eigenvalue)", title = "Scree Plot")
+```
+
+Calculate the Loadings
+
+```{r}
+cancerPCA$loadings <- cancerPCA$rotation%*%diag(cancerPCA$sdev)
+cancerPCA$loadings
+```
+
+```{r}
+pc_scores_df <- data.frame(cancerPCA$x, Diagnosis = cancer$diagnosis)
+ggplot(pc_scores_df, aes(x = PC1, y = PC2, color = Diagnosis)) +
+  geom_point(size = 2) +
+  labs(title = "PCA Scatter Plot of Iris Dataset", x = "PC1", y = "PC2") +
+  theme_minimal()
+```
+
+**Findings and Results**
+
+Clustering As we can see the majority of patients with a "Benign" tumor were in the first cluster and the patients with a "Malignant" tumor at the second cluster.
+Using 2 Clusters does a pretty good job a separating the benign and the malignant data, we do still have some, not many in each cluster that belong to the other class.
+
+Hotelling's T Test We can use the Hotelling's T test to see if the variables are different between Malignant and Benign, and what we found is that our p-value is less than 0.05, because our p-value is very small, with strong confidence, the null hypothesis that The means of the variables are equal between the groups can be rejected.
+
+T.2 = 175.01, df1 = 6, df2 = 562, p-value \< 2.2e-16 T-statistic: 1059.93
+
+Shapiro-Wilks Test
+
+The Overall Data (Benign and Malignant)
+
+radius_mean:
+W = 0.94107, p-value = 3.106e-14
+
+
+texture_mean:
+W = 0.97672, p-value = 7.284e-08
+
+
+$perimeter_mean:
+W = 0.93618, p-value = 7.011e-15
+
+
+area_mean:
+W = 0.8584, p-value < 2.2e-16
+
+smoothness_mean:
+W = 0.98749, p-value = 8.601e-05
+
+
+compactness_mean:
+W = 0.91698, p-value < 2.2e-16
+
+Generalized:\
+MVW = 0.91731, p-value \< 2.2e-16
+
+The p-value is significantly less than 0.05, indicating that the radius_mean does not follow a normal distribution.
+The p-value is significantly less than 0.05, indicating that the texture_mean does not follow a normal distribution.
+The p-value is significantly less than 0.05, indicating that the perimeter_mean does not follow a normal distribution.
+The p-value is significantly less than 0.05, indicating that the area_mean does not follow a normal distribution.
+The p-value is significantly less than 0.05, indicating that the smoothness_mean does not follow a normal distribution.
+The p-value is significantly less than 0.05, indicating that the compactness_mean does not follow a normal distribution.
+The generalized p-value is extremely small, indicating that the overall data (both benign and malignant) does not follow a normal distribution.
+
+Diagnosis = "Benign"
+
+radius_mean: W = 0.99665, p-value = 0.668
+
+texture_mean: W = 0.94417, p-value = 2.385e-10
+
+perimeter_mean: W = 0.9971, p-value = 0.7795
+
+area_mean: W = 0.99064, p-value = 0.02278
+
+smoothness_mean: W = 0.97551, p-value = 9.507e-06
+
+compactness_mean: W = 0.92587, p-value = 2.644e-12
+
+Generalized MVW = 0.93541, p-value \< 2.2e-16
+
+The p-value is greater than 0.05, so we fail to reject the null hypothesis.
+This suggests that the data for radius_mean is normally distributed.
+
+The p-value is much less than 0.05, so we reject the null hypothesis.
+This indicates that the data for texture_mean is not normally distributed.
+
+The p-value is greater than 0.05, so we fail to reject the null hypothesis.
+This suggests that the data for perimeter_mean is normally distributed.
+
+The p-value is less than 0.05, so we reject the null hypothesis.
+This indicates that the data for area_mean is not normally distributed.
+
+The p-value is much less than 0.05, so we reject the null hypothesis.
+This indicates that the data for smoothness_mean is not normally distributed.
+
+The p-value is much less than 0.05, so we reject the null hypothesis.
+This indicates that the data for compactness_mean is not normally distributed.
+
+The p-value is much less than 0.05, so we reject the null hypothesis.
+This indicates that the generalized data is not normally distributed.
+
+Diagnosis = "Malignant" 
+
+radius_mean W = 0.97766, p-value = 0.001895
+
+texture_mean W = 0.96909, p-value = 0.0001342
+
+perimeter_mean W = 0.97302, p-value = 0.0004326
+
+area_mean W = 0.93326, p-value = 2.97e-08
+
+smoothness_mean W = 0.98469, p-value = 0.0215
+
+compactness_mean W = 0.95743, p-value = 5.858e-06
+
+Generalized MVW = 0.94721, p-value \< 2.2e-16
+
+The p-value is less than 0.05, strongly indicating that the radius_mean data is not normally distributed.
+The p-value is less than 0.05, strongly indicating that the texture_mean data is not normally distributed.
+The p-value is less than 0.05, strongly indicating that the perimeter_mean data is not normally distributed.
+The p-value is less than 0.05, strongly indicating that the area_mean data is not normally distributed.
+The p-value is less than 0.05, indicating that the smoothness_mean data is not normally distributed.
+The p-value is less than 0.05, indicating that the compactness_mean data is not normally distributed.
+The p-value is extremely small, indicating that the generalized data is not normally distributed.
+
+Looking at the Overall data of the the 6 variables, we can say the the p-value for each variable and for the data overall is less than 0.05, because our p-value is so small, we have strong evidence to reject the idea the our data follows a multivariate normal distribution.
+Now, when we look at the benign data,the variables radius_mean, perimeter_mean actually are normally distributed while the rest of the variables do not follow a multivariate normal distribution.
+The p-value for our generalized benign data is smaller than 0.05, so we have strong evidence to reject the idea that the data follow a multivariate normal distribution.
+Same thing can't be said for Malignant data, the p-value for each variable is less than 0.05, this means that we have strong evidence to reject that the data does not follow a mulivariate normal distribution.
+
+PCA Looking at the Scree Plot, we can say that 2 PCs contribute the most to our dataset of the 6 chosen variables.
+
+In terms of Contributions or Impact: PC1: radius_mean: -0.5037 (High Contribution) perimeter_mean: -0.5114 (High Contribution) area_mean: -0.5015 (High Contribution) compactness_mean: -0.3773
+
+PC2: smoothness_mean: -0.7609 (High Negative) compactness_mean: -0.4949 (High Negative) texture_mean: 0.2682 radius_mean: 0.1997
+
+PC1: Represents the overall size of the cells.
+PC2: Represents the contrast between texture/size and smoothness/compactness of the cells.
+
+Logistic/Tree Comparison
+
+Logistic Regression:
+CancerClass
+    0   1
+  0 341  16
+  1  23 189
+
+Missclassification Rate: 0.073
+
+Classification Tree
+Benign Malignant
+Benign       330        27
+Malignant      7       205
+
+Miss-classification Rate:0.063
+
+Root Node (Node 1): 569 observations: Total data points.
+210 Benign: Number of benign cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 62.74% 'Benign', 37.26% 'Malignant'.
+
+Node 2: area_mean \< 700: First split based on the mean area.
+397 observations: Data points in this node.
+50 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 87.41% 'Benign', 12.59% 'Malignant'.
+
+Node 4: compactness_mean \< 0.12: Next split based on the mean compactness.
+323 observations: Data points in this node.
+14 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 95.67% 'Benign', 4.33% 'Malignant'.
+
+Node 8: texture_mean \< 20: Further split based on the mean texture.
+230 observations: Data points in this node.
+1 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 99.57% 'Benign', 0.43% 'Malignant'.
+Terminal Node: No further splits.
+
+Node 9: texture_mean \>= 20: Split based on the mean texture.
+93 observations: Data points in this node.
+13 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 86.02% 'Benign', 13.98% 'Malignant'.
+
+Node 18: area_mean \< 560: Further split based on the mean area.
+69 observations: Data points in this node.
+2 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 97.10% 'Benign', 2.90% 'Malignant'.
+Terminal Node: No further splits.
+
+Node 19: area_mean \>= 560: Split based on the mean area.
+24 observations: Data points in this node.
+11 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 54.17% 'Benign', 45.83% 'Malignant'.
+
+Node 38: smoothness_mean \< 0.093: Further split based on the mean smoothness.
+13 observations: Data points in this node.
+3 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 76.92% 'Benign', 23.08% 'Malignant'.
+Terminal Node: No further splits.
+
+Node 39: smoothness_mean \>= 0.093: Split based on the mean smoothness.
+11 observations: Data points in this node.
+8 Malignant: Number of malignant cases.
+Predicted class = Malignant: Majority class is 'Malignant'.
+Probabilities: 27.27% 'Benign', 72.73% 'Malignant'.
+Terminal Node: No further splits.
+
+Node 5: compactness_mean \>= 0.12: Split based on the mean compactness.
+74 observations: Data points in this node.
+36 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 51.35% 'Benign', 48.65% 'Malignant'.
+
+Node 10: texture_mean \< 21: Further split based on the mean texture.
+49 observations: Data points in this node.
+15 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 69.39% 'Benign', 30.61% 'Malignant'.
+
+Node 20: area_mean \< 530: Further split based on the mean area.
+32 observations: Data points in this node.
+5 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 84.38% 'Benign', 15.62% 'Malignant'.
+
+Node 40: compactness_mean \< 0.17: Further split based on the mean compactness.
+25 observations: Data points in this node.
+1 Malignant: Number of malignant cases.
+Predicted class = Benign: Majority class is 'Benign'.
+Probabilities: 96.00% 'Benign', 4.00% 'Malignant'.
+Terminal Node: No further splits.
+
+Node 41: compactness_mean \>= 0.17: Split based on the mean compactness.
+7 observations: Data points in this node.
+3 Malignant: Number of malignant cases.
+Predicted class = Malignant: Majority class is 'Malignant'.
+Probabilities: 42.86% 'Benign', 57.14% 'Malignant'.
+Terminal Node: No further splits.
+
+Node 21: area_mean \>= 530: Split based on the mean area.
+17 observations: Data points in this node.
+7 Malignant: Number of malignant cases.
+Predicted class = Malignant: Majority class is 'Malignant'.
+Probabilities: 41.18% 'Benign', 58.82% 'Malignant'.
+Terminal Node: No further splits.
+
+Node 11: texture_mean \>= 21: Split based on the mean texture.
+25 observations: Data points in this node.
+4 Malignant: Number of malignant cases.
+Predicted class = Malignant: Majority class is 'Malignant'.
+Probabilities: 16.00% 'Benign', 84.00% 'Malignant'.
+Terminal Node: No further splits.
+
+Node 3: area_mean \>= 700: Split based on the mean area.
+172 observations: Data points in this node.
+10 Malignant: Number of malignant cases.
+Predicted class = Malignant: Majority class is 'Malignant'.
+Probabilities: 5.81% 'Benign', 94.19% 'Malignant'.
+Terminal Node: No further splits.
+
+The Classification Tree, based on the miss-classification rate could be the better model than Logistic Regression
+
+**The Final Report**
+
+This data set was about breast cancer among millions of women, there are 32 variables, with one being categorical, which is whether the breast cancer lump is malignant or benign.
+I am interested in analyzing perimeter_mean, area_mean, radius_mean, texture_mean, smoothness_mean, compactness_mean, the "mean" variables of the data set.
+I feel this variables are appropriate to analyze and inspect to get a good description of our data.
+I started by removing the X variable, this variable had no meaning to my data, it was full of NAs.
+Next, I created a subset of my data for the 6 variables that I have picked.
+We can look at the distributions of each variable by diagnoses to get a better glimpse at what we are working with.
+
+I asked the question if I could split up the data by diagnosis, the solution required K-Means Clustering.
+When using K-Means, I had to find the Optimal Number of Clusters, using the "wss" method, I also tried silhouette method, but I got the same result.
+I got 2 clusters based on the elbow method, which is fine.
+After Looking at the Cluster Graph and at the Cluster Table, I could tell you that 2 clusters did a very good job at separating the data based on Diagnosis.
+I can though, it is not perfect, but it is much better than the other number of clusters I tried.
+
+I first looked at the data of benign and the data of malignant, I wanted to see if the mean of the variables are any different from each other.
+I decided to use Hotelling's T2 test, this is appropriate to use when we want to see if there is a significant differences between groups of breast cancer patients based on on Diagnoses.
+Looking at the results from above, we can see that the p-value is very low, so.
+It was a good test to look at my data when considering multiple dependent variables simultaneously and see if the difference are any significant between the malignant and benign data.
+
+The next objective I wanted to look at in this dataset is if the data follows normality, we could use qq-plots for each of the 6 variables and look at the tails and if they follow near the line, but a quicker way is to use the Shapiro-Wilks test.
+Using the Shapiro test helps me see if these 6 variables follow a multivariate normal distribution.
+In the results for our overall data (both malignant and benign data).
+The data does not follow a multivariate normal distribution, but when we break the data down by diagnosis, we do find that two variables in the benign data does follow a multivariate normal distribution while all the variables in the malignant data does not
+
+I decided to try classification next, I used logistic regression and a classification tree (Decision Tree).
+I interpreted my results for each node from the decision tree and it went pretty well.
+Next I wanted to create a Matrix that can determine the miss-classification percent so I can determine which model did better on my training data.
+The miss-classification percent for Logistic Regression is 0.068, while the miss-classification percentage for my Decision Tree is 0.059.
+I will say the both models did pretty well in terms of handling miss-classified data, but if I were to pick one, I would pick the Classification Tree to be the model for my data set.
+
+I decided to use PCA on my data for an in-depth analysis for my new data.
+Again, I just used PCA on my 6 variables, I tried it with my 32 variables and it was a mess, this was a reason I cut down to 6 variables.
+I used a Skree Plot to determine the number of PCs to use or look at, and what I got was that 2 PCs would be a good choice in explaining importance.PC 1 represents the overall size of the cells.
+PC 2 represents the contrast between texture/size and smoothness/compactness of the cells.
+Now I wanted to see the contributions in each of the 2 PCs.
+
+This project was fun to work on and it gives my a good insight on how the malignant and benign data differ.
+K-means and PCA helped give me a visual insight in how we can separate our data and it works really well and using a table does help me differentiate, so I can say that we can differentiate the diagnosis in our data by clustering.
+I have learned that the overall data does not follow a multivariate normal distribution, but when we break the data down by diagnosis, we do find that two variables in the benign data does follow a multivariate normal distribution while all the variables in the malignant data does not.
+I can also conclude that the mean that the 6 c cancer size variables do not have the same means for the malignant and benign diagnosis.
+In terms of classification, both models do pretty well handling miss-classification but I believe that a Classification tree would be the way to go.
+We got to the bottom of the data set and learned really interesting things about our data in terms of normality, differences, how easily the clustering is, PCA does a good job explaining our data and Classification helps us with our data.
