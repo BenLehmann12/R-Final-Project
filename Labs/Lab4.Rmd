@@ -1,0 +1,211 @@
+---
+title: "Lab4"
+author: "Ben Lehmann,Zachary Picchietti"
+date: "2024-09-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+```{r}
+sweat<-read.table("sweat.dat",header=F, col.names=c("subject", "x1", "x2", "x3"))
+```
+
+```{r}
+library(ggplot2)
+library(GGally)
+```
+
+
+Question 1
+a).
+```{r}
+ggpairs(sweat[,2:4])
+```
+We see the Scatterplot between x3 and x1 is weak Negative while x1 and x2 is weak to moderately positive
+They both seem to be straight lines. X2 and X3 is curved line.
+
+
+b). No, because we can see that data is still close to each other
+
+c). X1 is right skewed, X2 is left skewed, X3 is right skewed. The centers of the distribution graphs are on par with the centers of the data plot.
+
+d).
+```{r}
+xbar <- sapply(sweat[ , 2:4], mean)
+scor<-cor(sweat[ ,2:4])
+svar<-var(sweat[ ,2:4])
+scov <- cov(sweat[,2:4])
+
+```
+
+
+```{r}
+xbar
+```
+
+```{r}
+scor
+```
+
+```{r}
+svar
+```
+
+```{r}
+det(scov)
+```
+```{r}
+sum(diag(scov))
+```
+```{r}
+sum(diag(scor))
+```
+
+When we computed Trace for the Correlation Matrix, we got 3, this is the same number of variables in the dataset
+Trace of the Correlation Matrix is equal to the number of variables in the data matrix.
+
+
+Question 2
+
+
+```{r}
+layout(matrix(1:4, ncol = 2))  # Arrange the plots in rows with two plots per row
+for (x in colnames(sweat[, 2:4])) {
+  qqnorm(sweat[[x]], main = x)
+  qqline(sweat[[x]])
+}
+
+# Draw qq-plot: option 2 (use ggplot2 package)
+sweat_qqplot <- rbind(data.frame(value = sweat[, 2], variable = "x1"),
+                      data.frame(value = sweat[, 3], variable = "x2"),
+                      data.frame(value = sweat[, 4], variable = "x3"))
+ggplot(sweat_qqplot, aes(sample = value)) +
+  geom_qq() +
+  geom_qq_line() +
+  facet_wrap(~ variable, scales = "free", nrow = 2)
+
+# Compute the Shapiro-Wilk test statistic for each variable
+sapply(sweat[, 2:4], shapiro.test)
+```
+
+No, we see that the data points are very close to the line, The more the points are near the line, the more we can assume normality and that the distributions are normal as well. We can also see that there are no outliers.
+
+
+Question 3.
+
+```{r}
+library(mvShapiroTest)
+mvShapiro.Test(as.matrix(sweat[ , 2:4]))
+```
+a). Null: Samples come from a Normal Distribution
+    Alternative: Samples do not come from Normal Distribution
+    
+b). MVW=0.94446, P-value=0.2567
+We have to little to no evidence to reject the Null Hypothesis, we accept that Samples come from a Normal Distribtion
+
+
+
+Question 4).
+```{r}
+library(DescTools)
+
+t2test <- HotellingsT2Test(sweat[, 2:4], mu = c(4, 50, 10))
+t2test
+# Be careful: T.2 is the F statistic, not T2 statistic!!!
+# Convert it back to T2 statistic.
+n <- nrow(sweat[, 2:4])
+p <- ncol(sweat[, 2:4])
+t2test$statistic * p * (n - 1) / (n - p)
+```
+
+
+a). Null Hypothesis:  data were sampled from a multivariate normal distribution with population mean vector (4, 50, 10)
+    Alternative Hypothesis: the data were sampled from some other population with a mean vector that is not (4, 50, 10) 
+    
+b).The vectors of observations x1, x2, ....xn are independent,each randomly drawn from the same population
+Each xi is randomly selected from a population with a multivariate normal distribution with mean vector mu and covariance matrix sigma
+
+c). F = 2.9045, df1 = 3, df2 = 17, p-value = 0.06493, T^2 = 9.738
+
+d). We have weak evidence against our Null hypothesis, therefor, the difference between the two vectors of our multivariate data are equal.
+
+
+Question 5. Boards
+
+```{r}
+boards <- read.csv("board.stiffness.csv")
+head(boards)
+```
+
+```{r}
+ggpairs(boards[ ,2:5])
+```
+
+```{r}
+newboards <- read.csv("newboard.stiffness.csv")
+head(newboards)
+```
+
+
+```{r}
+allboards <-rbind.data.frame(boards, newboards)
+allboards
+```
+
+```{r}
+allboards$wood="original"
+allboards$wood[allboards$board==1001] <- "new"
+allboards$wood[allboards$board==1002] <- "new"
+allboards$wood[allboards$board==1003] <- "new"
+allboards$wood <- factor(allboards$wood)
+ggpairs(allboards[,2:6], mapping=aes(color=wood))
+```
+
+
+```{r}
+newb <- as.matrix(newboards[, 2:5])
+bmean <- colMeans(boards[, 2:5])
+bvar <- var(boards[, 2:5])
+n <- nrow(boards)
+p <- length(bmean)
+diff <- newb - c(1, 1, 1) %*% t(bmean)
+sdiff <- ((n + 1) / n) * bvar
+d22 <- diff %*% solve(sdiff) %*% t(diff)
+d2 <- diag(d22)
+
+# Compute p-values of the Mahalanobis distances
+prob <- 1 - pchisq(d2, p)
+prob
+```
+We can say that the New Boards are cut from the same wood, based on our correlation values.
+
+
+
+Question 6
+
+```{r}
+library(mvtnorm)
+library(mvShapiroTest)
+set.seed(475)  # Set seed before your first random generator!!!!
+
+xsigma <- matrix(c(1, -0.5, -0.5, 1), ncol = 2, byrow = T)
+
+# Simulate data from multivariate normal distribution
+sim.mvn <- data.frame(rmvnorm(100, mean = c(0, 0), sigma = xsigma))
+head(sim.mvn)
+qplot(X1, X2, data = sim.mvn) + theme(aspect.ratio = 1)
+mvShapiro.Test(as.matrix(sim.mvn))
+
+# Simulate data from multivariate t distribution
+sim.mvt <- data.frame(rmvt(100, sigma = xsigma))
+head(sim.mvt)
+qplot(X1, X2, data = sim.mvt) + theme(aspect.ratio = 1)
+mvShapiro.Test(as.matrix(sim.mvt))
+```
+
+We expected that the Shapiro-Wilk test would do better for the Multivariate Normal Distribution than the T-distribution.
+After the first simulation, we noticed that the T-distribution has a better and stronger p-value than the Normal Distribution. The Normal Distribution has a better MVW than the t-distribution. Our Expectations were proven to be correct.

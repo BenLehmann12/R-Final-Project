@@ -1,0 +1,134 @@
+---
+title: "Lab3"
+author: "Ben Lehmann, Zachary Picchietti"
+date: "2024-09-12"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#Question 1
+
+```{r}
+library(ggplot2)
+library(GGally)
+```
+
+
+```{r}
+music <- read.csv("music-plusnew-sub.csv", row.names=1,
+stringsAsFactors=FALSE)
+```
+
+
+```{r}
+music.sub <- subset(music, Type == "Rock" | Type == "Classical")
+```
+
+
+```{r}
+qplot(LAve, data=music.sub, geom="histogram", binwidth=10.0) +
+facet_wrap(~Type, ncol=1)
+
+```
+
+a). Classical is skewed to the right while Rock is skewed to the left. They have different center values.
+Classical seems to have an outlier while Rock's distribution does not look like it has any outlier.
+
+
+```{r}
+ggplot(music.sub, aes(x = LVar, y = LAve, color = Type)) +
+  geom_point(size = 3) +
+  labs(title = "Scatterplot of LVar vs LAve",
+       x = "LVar",
+       y = "LAve") 
+```
+
+b). Classical Music have low LVar and high LAve, Rock music is more scattered,
+there is some Rock Music with Low LVar and low LAVe, however, higher LVar will have Rock's LAve be around 0
+
+
+```{r}
+music.sub2 <- subset(music, Type == "Rock" | Type == "Classical" |
+Type=="New wave")
+```
+
+
+
+```{r}
+ggparcoord(music.sub2, columns=c(4, 3, 5, 6, 7),
+groupColumn="Type",
+title="Parallel Coordinate Plot: Music Types")
+
+```
+
+c). Classical Music, is higher in LAve and LFreq, but lower in everything else compared to Rock,
+    Rock is high in LVar,LFEner. New Wave is lower than rock, we could say Yes that there is evidence.
+    
+    
+
+Exercise 2
+
+```{r}
+fat <- read.csv('bodyfat.csv')
+```
+
+
+```{r}
+ggpairs(fat[,1:4])
+```
+
+1). The problem is that there is an outlier where an inch is less than 60 and where Weight is more than 300 pounds.
+
+
+2).
+```{r}
+filtered_data <- fat[fat$Heightinches > 60 & fat$Weightlbs < 300, ]
+ggpairs(filtered_data[,1:4])
+```
+
+The Strongest correlation is between Weight and Body Fat, the negative correlation is Inches and Age.
+We look at the Graph comparing Wight and body Fat, we see a positive, linear and strong correlation. Years and weight is near 0 for correlation, so there will be not much.
+
+3).
+
+```{r}
+ggparcoord(fat, 4:14)
+```
+One of the outliers is with the variable HeightInInches, you can see that huge dip in the beginning compared to the rest of the graph.
+
+
+4).
+```{r}
+ggparcoord(filtered_data, 4:14)
+```
+We don't see that sharp decline in the beginning with Height because we removed the outlier.The Graph changes, the y-axis interval of values changes and shrinks.
+
+
+
+Excercise 3
+
+```{r}
+pisamath <- read.csv("pisamathmeans.csv")
+pisamath2 <- subset(pisamath, !is.na(acc))
+```
+
+```{r}
+summary(pisamath)
+```
+
+1). 4978 NA in Acc
+
+2).
+
+```{r}
+ggpairs(pisamath2, aes(color=Gender))
+```
+
+
+Each variable is strong in terms of Association, they are all above 0.9
+The lowest correlation is 0.89 between api and acs, still impressive correlation.
+Each Graph shows a strong positive linear correlation

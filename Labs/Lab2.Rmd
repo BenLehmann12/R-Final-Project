@@ -1,0 +1,163 @@
+---
+title: "Lab2"
+author: "Ben Lehmann, Zachary Picchietti"
+date: "2024-09-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Exercise 1
+```{r}
+library(dplyr)
+Ames <- read.csv("Ameshousing.csv")
+head(Ames)
+dim(Ames)
+```
+
+
+
+a). 168 homes
+b). SalePrice, Bedrooms, LotArea, LivingArea, GarageArea, Neighborhood
+
+
+Exercise 2
+a). Mean = 1700.1, Median = 1629.5, SE = 32.327
+```{r}
+median_living_area <- median(Ames$LivingArea)
+mean_living_area <- mean(Ames$LivingArea)
+se_living_area <- sd(Ames$LivingArea) / sqrt(length(Ames$LivingArea))
+
+median_living_area
+mean_living_area
+se_living_area
+```
+
+b).
+
+
+```{r}
+neighborhds_mean <- tapply(Ames$LivingArea, Ames$Neighborhood, mean)
+neighborhds_median <- tapply(Ames$LivingArea, Ames$Neighborhood, median)
+neighborhds_sd <- tapply(Ames$LivingArea, Ames$Neighborhood, sd)
+neighborhds_length <- tapply(Ames$LivingArea, Ames$Neighborhood, length)
+neighborhood_sderr <- neighborhds_sd / sqrt(neighborhds_length)
+
+
+neighborhds_mean
+neighborhds_median
+neighborhood_sderr
+
+```
+
+c). n = 116, mean = 215756.71, se = 4693.03
+
+```{r}
+houses_less_1800 <- Ames %>% filter(LivingArea < 1800)
+```
+
+```{r}
+num_houses_less_1800 <- length(houses_less_1800$SalePrice)
+mean_sale_price_less_1800 <- mean(houses_less_1800$SalePrice)
+se_sale_price_less_1800 <- sd(houses_less_1800$SalePrice) / sqrt(num_houses_less_1800)
+
+num_houses_less_1800
+mean_sale_price_less_1800
+se_sale_price_less_1800
+```
+
+
+
+d). n=36, mean=353458.33, se=18848.27
+```{r}
+area_greater_2000 <- Ames %>% filter(Ames$LivingArea > 2000)
+```
+
+
+```{r}
+number_houses_greater <- length(area_greater_2000$SalePrice)
+mean_sale_price_greater <- mean(area_greater_2000$SalePrice)
+se_sale_price_greater <- sd(area_greater_2000$SalePrice) / sqrt(number_houses_greater)
+
+se_sale_price_greater
+```
+
+
+e).
+
+```{r}
+neighb_mean <- tapply(houses_less_1800$SalePrice, houses_less_1800$Neighborhood, mean)
+neighb_median <- tapply(houses_less_1800$SalePrice, houses_less_1800$Neighborhood, median)
+neighb_sd <- tapply(houses_less_1800$SalePrice, houses_less_1800$Neighborhood, sd)
+neighb_length <- tapply(houses_less_1800$SalePrice, houses_less_1800$Neighborhood, length)
+neighb_sderr <- neighb_sd / sqrt(neighb_length)
+
+neighb_length
+neighb_mean
+neighb_sderr
+```
+
+Exercise 3
+a). For every additional square foot in living area, the sale price of the home increases by 159.5 dollars
+
+b). As more and more square footage is added, the price tends to increase at a higher rate.
+
+
+Exercise 4
+```{r}
+Ames$pricesqft <- Ames$SalePrice/Ames$LivingArea
+```
+
+
+```{r}
+mean(Ames$pricesqft)
+```
+
+```{r}
+library(ggplot2)
+qplot(pricesqft, data = Ames, geom = "histogram", binwidth=20.0)
+```
+a). The Shape is right skewed, normal distribution, the  mean for pricesqft is around 146.6, so the center is around there 146 to 150 area. When we move to the right, the distribution decreases.
+
+
+b). The first thing the can be noticed is that those gaps in the original distribution graph is gone.This is because we added more bin width options. We can still see the skewness in the graph (Right skewed). This is an improvement, because having less bins make the graph messy and hard to come to a conclusion.
+
+
+Exercise 5
+
+a). Northridge Heights and CollegeCr has trends that are constantly increasing so the prices increase as the squareft increasea as well, Gilbert on the other hand sees a an outlier which creates a peak in the model, not creating a linear line.
+
+b).
+
+```{r}
+library(ggplot2)
+qplot(Neighborhood, pricesqft, data = Ames, geom = "boxplot",
+ylab="Sales Price per Square Foot")
+
+```
+
+c).
+
+```{r}
+qplot(Neighborhood, LotArea, data = Ames, geom = "boxplot",
+ylab="Sales Price per Square Foot")
+```
+
+
+Exercise 6
+a).
+```{r}
+AmesX <- Ames[ , c(1,2,3,4,5,7)]
+cor(AmesX)
+```
+
+```{r}
+pairs(AmesX)
+```
+
+a). Looking at this graph and the correlation matrix, we can see the pattern. The least correlated variables have a much more scattered graph. In terms of correlation, Sales price and the number of bedrooms have a low correlation, Sales Price and Lot area have a better and positive correlation. The highest correlation is between Sales Price and Living Area, with 0.757. The lowest correlation or no correlation at all is the number of bedrooms and square feet.
+
+b). We learned that Sales price has a high correlation with every variable except the number of bedrooms. Looking at the graph and matrix, we learned that a higher correlation has a more narrow spread but a pattern is noticable. We learned that looking at the scatterplots, we can see the more dense areas which helps us determine a pattern.
