@@ -1,0 +1,215 @@
+---
+title: "HW4"
+author: "Ben Lehmann"
+date: "2024-10-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Question 1
+
+```{r}
+library(psych)
+```
+
+
+```{r}
+iris <- read.csv('iris.csv')
+```
+
+
+a)
+
+```{r}
+iris.pca <- prcomp(iris[,1:4], scale. = T)
+summary(iris.pca)
+
+```
+
+```{r}
+round(iris.pca$rotation,4)
+```
+
+```{r}
+iris.pca$sdev^2
+```
+
+
+b).
+PC1: PC1 explains about 72.77% of the total variance in the data, making it the most important component. Most of the variation in the data can be understood through PC1
+
+PC2: PC2 accounts for an additional 23.03% of the variance, bringing the total explained variance to 95.80%.
+
+PC3: PC3 captures only 3.68% of the variance, a small fraction, it provides a minor and y useful detail that may be missed by PC1 and PC2.
+
+PC4:PC4 explains only 0.515% of the variance, contributes very little to the overall variability of the data. This suggests it may not hold much additional valuable information beyond the first 3 PCs
+
+The first 2 PCs capture 95% of total variance of the data set.
+
+
+c).
+
+```{r}
+library(ggplot2)
+ggplot(data.frame(x = 1:4, y = iris.pca$sdev ^ 2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "No. of PCs", y = "Component Variance (eigenvalue)", title = "Scree Plot")
+```
+
+
+d). There should be 2 PCs
+
+e).
+
+```{r}
+iris.pca$x[, 1:2]
+```
+
+
+
+
+f).
+
+
+```{r}
+pc_scores_df <- data.frame(iris.pca$x[, 1:2], Species = iris$class)
+```
+
+
+
+```{r}
+ggplot(pc_scores_df, aes(x = PC1, y = PC2, color = Species)) +
+  geom_point(size = 2) +
+  labs(title = "PCA Scatter Plot of Iris Dataset", x = "PC1", y = "PC2") +
+  theme_minimal()
+```
+
+
+
+
+```{r}
+qplot(iris.pca$x[,1],iris.pca$x[,2], col=iris$class)
+```
+By the looks of the graph, I would say Yes, the first 2 PC's do a good job separating the classes.
+
+Question 2
+
+```{r}
+open <- read.csv('USOpen-men-2013.csv')
+```
+
+a).
+```{r}
+open <- na.omit(open)
+#open[,c(4,5,6,7,9,10,11,12,13,14,15,16,17,19,20,21,22,23,24,25)]
+```
+
+
+```{r}
+subset(open, select = -c(Player1,Player2,Result,SSP.1,SSP.2))
+```
+
+
+b).
+
+```{r}
+#open.pca <- prcomp(open[,c(4,5,6,7,9,10,11,12,13,14,15,16,17,19,20,21,22,23,24,25)], scale. = T)
+open.pca <- prcomp(subset(open, select = -c(Player1,Player2,Result,SSP.1,SSP.2)), scale. = T)
+summary(open.pca)
+```
+We remove them because of they have skweness to them, these variables are derived from other variables and that there could be multicolinearity with redundancy. There could be multiple missing data in the variables as well. The last couple PCs will have 100 for Cumulative Population.
+
+
+c).
+
+```{r}
+library(ggplot2)
+ggplot(data.frame(x = 1:20, y = open.pca$sdev ^ 2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "No. of PCs", y = "Component Variance (eigenvalue)", title = "Scree Plot")
+```
+
+
+```{r}
+cum_var <- summary(open.pca)$importance[3, ]
+cum_var
+```
+
+```{r}
+num_pcs <- which(cum_var >= 0.80)[1]
+```
+6 PCs with the cumulative of 0.81%
+
+
+d).
+
+
+```{r}
+open.pca$loadings <- open.pca$rotation%*%diag(open.pca$sdev)[,1:6]
+open.pca$loadings
+```
+
+
+
+e).
+
+Attempt 1
+```{r}
+openVar <- varimax(open.pca$loadings[ ,1:6])
+openVar$loadings
+```
+
+Factor 1: Highly Negative on multiple variables like FSW.1, SSW.1, NPA.1, NPW.1
+Higher values here might indicate weaker performance in these areas.
+
+Factor 2: Exhibits positive loadings on FNL2 and BPC.2, BPW.1. These shared positive influences could indicate a distinct underlying trait that these variables measure, like overall performance or efficiency.
+
+Factor 3: There are positive loadings on variables like SSW.2 and ACE.2., DBF.2
+
+Factor 4: Has strong positive loadings on variables BPC.2, BPW.2
+
+Factor 5: Has high negative loadings on variables NPA.2, NPW.2
+
+Factor 6: Variables such as ACE.1, DBF.1, SSW.1, load highly with Factor 6
+
+
+
+f).
+
+```{r}
+sapply(1:14, function(f)
+    factanal(open[,c(3,4,5,6,7,9,10,11,12,13,14,15,16,17,19,20,21,22,23,24,25)], factors = f, method="mle", opt=list(maxit=1e3))$PVAL)
+```
+
+
+g).
+
+Factor = 6, yes, this is the same as what we picked before.
+```{r}
+factanal(open[,c(4,5,6,7,9,10,11,12,13,14,15,16,17,19,20,21,22,23,24,25)], factors = 6, method ="mle", rotation="varimax", scores = "regression")
+```
+
+Factor = 7
+```{r}
+factanal(open[,c(4,5,6,7,9,10,11,12,13,14,15,16,17,19,20,21,22,23,24,25)], factors = 7, method ="mle", rotation="varimax")
+```
+
+
+h).
+
+Factor 1 shows high strong negative loadings on variables FSW.1, SSW.1, FSW.2, and SSW.2. With the most variables
+
+Factor 2 shows has high positive loadings with variables FNL1, BPC.1,BPC.2, and BPW.1
+
+Factor 3 loads highly positive loading on variable BPC.2
+
+Factor 4 loads highly positive loadings with variables NPA.1 and NPW.1, negative with DBF.1
+
+Factor 5 loads highly positive loadings with variables NPA.2 and NPW.2 negative with ACE.1
+
+Factor 6 loads highly postive loadings with variables FSP.1, negative with SSW.1, DBF.1, BPC.2, there are fewer variables
