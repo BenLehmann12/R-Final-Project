@@ -1,0 +1,249 @@
+---
+title: 'Lab7'
+author: "Ben Lehmann, Zachary Picchietti"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# *You may help each other, but please do it QUITELY.*
+
+## Data for the college students study (MANOVA)
+
+A MONOVA analysis will be used to compare vectors of mean scores on four different tests (aptitude, math, language, gen_know) for three populations of college students in the Dominican Republic: (1) technology students, (2) architecture students, and (3) medical technology students). The data are posted as morel.csv. Copy this data file to your project directory. Enter the data into a data frame in R. List the first six lines of data.
+
+Load the car library. We will use the Manova function from the car package. You will need to install the car package if you have not done so earlier. Run install.packages("car") in the console window.
+
+```{r}
+morel <- read.csv("morel.csv")
+morel$group <- as.factor(morel$group)
+
+# Compute the F-test for the Wilks criterion
+library(car)
+fit.lm <- lm(cbind(aptitude, math, language, gen_know) ~ group, data = morel)
+fit.manova <- Manova(fit.lm)  # Manova, not monova
+summary(fit.manova)
+```
+
+## Exercise 1
+
+List the three conditions needed to accurately to apply Wilks criterion to test the null hypothesis that the vector of population mean values on aptitude, math, language, and general knowledge tests are the same for the three types of students (technology, architecture, and medical technology). List the conditions in order on importance, relative to which condition would have the most deleterious effect on the accuracy of the p-value reported for the test if it is violated.
+
+
+Conditions: Multivariate Normality, Equality of Covariance matrix, Independence of Observations.
+Since the p-value is greater than 0.05, we fail to reject the Null, we can say that the data follows a Normal Multivariate Distribution.
+
+## Homogeneous covariance matrices
+
+Apply Box's M-test to test the null hypothesis of homogeneous covariance matrices. This test is sensitive to the lack of normality and has a tendency to reject the null hypothesis of homogeneous covariance matrices just due to lack of normality. First install the biotools package. You can use install.packages("biotools") in the console window to do this. Do not put install.packages("biotools") in a chunk.
+
+```{r}
+# Check homogeneity of covariance matrices
+library(biotools)
+boxM(morel[, -1], morel$group)
+```
+
+## Simultaneous inference for pairs of means
+
+Construct Bonferroni confidence intervals for difference in twelve pairs of means.
+
+```{r}
+# Compute sample sizes and number of variables
+n1 <- nrow(morel[morel$group == 1, -1])
+n2 <- nrow(morel[morel$group == 2, -1])
+n3 <- nrow(morel[morel$group == 3, -1])
+p <- ncol(morel[, -1])
+g <- 3
+
+# Enter the confidence level
+level <- 0.95
+
+# Compute Bonferroni confidence intervals for each student population
+m <- p * g * (g - 1) / 2  # p dimensions, g (g-1) / 2 combinations (choose 2 out of g)
+levelb <- 1 - ((1 - level) / (2 * m))
+df <- n1 + n2 + n3 - g
+c_bon <- qt(levelb, df)
+
+# Compute sample means
+xbar1 <- colMeans(morel[morel$group == 1, -1])
+xbar2 <- colMeans(morel[morel$group == 2, -1])
+xbar3 <- colMeans(morel[morel$group == 3, -1])
+
+# Compute covariance matrix
+# Option 1: use pooled covariance matrix
+vpool <- fit.manova$SSPE / df
+
+lower_limit_1v2 <- (xbar1 - xbar2) - c_bon * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+upper_limit_1v2 <- (xbar1 - xbar2) + c_bon * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+
+lower_limit_1v3 <- (xbar1 - xbar3) - c_bon * sqrt(diag(vpool) * (1 / n1 + 1 / n3))
+upper_limit_1v3 <- (xbar1 - xbar3) + c_bon * sqrt(diag(vpool) * (1 / n1 + 1 / n3))
+
+lower_limit_2v3 <- (xbar2 - xbar3) - c_bon * sqrt(diag(vpool) * (1 / n2 + 1 / n3))
+upper_limit_2v3 <- (xbar2 - xbar3) + c_bon * sqrt(diag(vpool) * (1 / n2 + 1 / n3))
+
+rbind(lower_limit_1v2, upper_limit_1v2,
+      lower_limit_1v3, upper_limit_1v3,
+      lower_limit_2v3, upper_limit_2v3)
+
+# Compute covariance matrix
+# Option 2: use individual covariance matrix
+var1 <- var(morel[morel$group == 1, -1])
+var2 <- var(morel[morel$group == 2, -1])
+var3 <- var(morel[morel$group == 3, -1])
+
+lower_limit_1v2_unpool <- (xbar1 - xbar2) - c_bon * sqrt(diag(var1) / n1 + diag(var2) / n2)
+upper_limit_1v2_unpool <- (xbar1 - xbar2) + c_bon * sqrt(diag(var1) / n1 + diag(var2) / n2)
+
+lower_limit_1v3_unpool <- (xbar1 - xbar3) - c_bon * sqrt(diag(var1) / n1 + diag(var3) / n3)
+upper_limit_1v3_unpool <- (xbar1 - xbar3) + c_bon * sqrt(diag(var1) / n1 + diag(var3) / n3)
+
+lower_limit_2v3_unpool <- (xbar2 - xbar3) - c_bon * sqrt(diag(var2) / n2 + diag(var3) / n3)
+upper_limit_2v3_unpool <- (xbar2 - xbar3) + c_bon * sqrt(diag(var2) / n2 + diag(var3) / n3)
+
+rbind(lower_limit_1v2_unpool, upper_limit_1v2_unpool,
+      lower_limit_1v3_unpool, upper_limit_1v3_unpool,
+      lower_limit_2v3_unpool, upper_limit_2v3_unpool)
+```
+
+## Exercise 2
+
+Summarize the results provided by the simultaneous Bonferroni confidence intervals, and explain the meaning of those confidence intervals.
+
+1v2
+Aptitude: Since both bounds are negative, this indicates that Group 1 likely has significantly lower aptitude scores than Group 2
+Math: Since the boundaries include 0,there’s no strong evidence that the math scores differ significantly between the two groups
+Language:Since both bounds are negative, Group 1 is likely to have lower language scores than Group 2.
+Gen_Know: This interval includes zero, indicating no strong evidence of a difference in general knowledge between Group 1 and Group 2
+
+1v3
+Aptitude:The interval includes zero, meaning there is no significant difference in aptitude scores between Groups 1 and 3
+Math: This also includes zero, indicating no significant difference in math scores between these groups
+Language: The interval includes zero, meaning there’s no evidence of a significant difference in language scores.
+Gen_Know: Though the interval almost crosses zero, it leans negative, which could indicate that Group 1 might have slightly lower general knowledge scores than Group 3, but the effect is not very strong.
+
+2v3
+Aptitude:Since both bounds are positive, this shows Group 2 likely has higher aptitude scores than Group 3
+Math:This indicates Group 2 likely has significantly higher math scores than Group 3
+Language:Group 2 likely has higher language scores than Group 3
+
+## 100k road race data (PCA)
+
+This analysis examines scatter plot matrices and computes principal components for the 10k segments of a 100k road race. the data are from (Everitt 1994).
+
+There is one line of data for each of 80 racers with eleven numbers on each line. The first ten columns give the times (minutes) to complete successive 10k segments of the race. The last column has the racer's age (in years).
+
+
+```{r}
+race100 <- read.csv("race100k.csv", check.names = F)
+str(race100)
+head(race100)
+p1 <- ncol(race100)
+p <- p1 - 1
+```
+
+Use the ggpairs function to create a scatter plot matrix. Including the line helps you to see if most of the marginal association between two variables on can be described by a straight line. Recall that principal components are computed from variances and covariances (or correlations), which can only account for straight line relationships.
+
+```{r}
+# Draw scatter plot matrix
+library(GGally)
+ggpairs(race100, lower = list(continuous = "smooth"))
+```
+
+## Exercise 3
+
+Summarize the findings about variable dependence from the scatter plots.
+
+As we move to the right from (10-20k) to (90-100k) we notice that the correlation values start to decrease.
+The Variable Age does seem to have a good correlation with all Salary variables
+
+(10-20k) and (0k-10k) has the best correlation
+
+Age and (20-30k) are the closest to 0 or no correlation.
+
+## PCA from covariance matrix
+
+Compute principal components from the covariance matrix. This function creates a list with the following components
+
+- sdev: standard deviations of the component scores (square roots of eigenvalues of the covariance matrix)
+- rotation: Rotation/loading matrix, which are the coefficients needed to compute the scores (elements of eigenvectors)
+- x: a (n x p) matrix of scores
+- center, scale: the centering and scaling used
+
+```{r}
+# Perform principal components analysis (PCA) on the race data
+race.pc <- prcomp(race100[, -p1])
+race.pc
+race.pc$sdev
+race.pc$rotation
+head(race.pc$x)
+summary(race.pc)
+
+# Screen plot of PCA
+ggplot(data.frame(x = 1:p, y = race.pc$sdev ^ 2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Component Number", y = "Component Variance (eigenvalue)", title = "Scree Diagram")
+
+# Plot component scores for the first three principal components
+ggpairs(data.frame(race.pc$x[, 1:3]))
+```
+
+## Exercise 4
+
+Interpret the meanings of the first three principal components.
+
+PC1 and PC2 hold 80% of the proportion of variance of the data 
+But with PC3, they explain 90% of variation in the data.
+
+
+## Exercise 5
+
+Calculate and report the total variation explained by each principal component, and the accumulative variation explained by the first three PCs.
+
+PC1 explains 74.77% of the total variance, which is a significant portion, indicating that this component captures the majority of the variability in the data
+PC1 can be seen as an indicator of overall income level, with positive values representing higher income ranges
+
+PC2 explains 10.01% of the total variance, much less than PC1 but still a considerable amount. Together with PC1, these two components explain over 84% of the variance.
+PC2 appears to represent a contrast between high-income earners (90-100k) and lower-income earners. It might reflect the polarization or separation of these income groups
+
+PC3 explains 5.41% of the total variance, a smaller portion but still capturing meaningful patterns.
+PC3 likely reflects another dimension of income disparity, potentially related to intermediate (70l-80k) income groups and their deviation from both the lowest and highest income levels.
+
+
+## PCA from correlation matrix
+
+To compute principal components from a correlation matrix, you can first standardize the data.
+
+```{r}
+# Standardize the data
+races <- scale(race100, center = T, scale = T)
+ggpairs(data.frame(races), lower = list(continuous = "smooth"))
+
+# Perform principal components analysis (PCA) on the (standardized) race data
+races.pcor <- prcomp(races[, -p1])
+races.pcor$sdev
+summary(races.pcor)
+
+# Screen plot of PCA
+ggplot(data.frame(x = 1:p, y = races.pcor$sdev ^ 2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Component Number", y = "Component Variance (eigenvalue)", title = "Scree Diagram")
+```
+
+## Exercise 6
+
+Use the principal component scores from the raw data to look for differences among mature (age <= 40) and senior (age > 40) runners. Mature runners will be indicated by "M" and senior runners will be indicated by "S". Can we separate those two groups by using the first two principal component scores?
+
+Yes, because PC1 is 72.43% and PC2 is adding 12.84% we would by having these two PC scores, have a cummulative variance over 85.27%. This captures a large amount of variance of the dataset. 
+
+```{r}
+# Scatterplot of the first two PC scores, colored by mature (age <= 40) or senior (age > 40)
+race.type <- ifelse(race100$age > 40, "S", "M")
+ggplot(data.frame(race.pc$x, type = race.type)) +
+  geom_text(aes(PC1, PC2, color = type, label = type), show.legend = F) +
+  labs(x = "PC1: Overall time", y = "PC2: Change in time")
+```

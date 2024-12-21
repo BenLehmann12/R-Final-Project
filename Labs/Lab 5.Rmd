@@ -1,0 +1,310 @@
+---
+title: "Lab 5"
+author: "Ben Lehmann, Zachary Picchietti"
+date: "2024-09-25"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Data
+```{r}
+dogs <- read.csv("dogs.csv")
+head(dogs)
+str(dogs)
+```
+
+
+Examine Matrices
+
+```{r}
+cordogs <- cor(dogs[, 2:5])
+cordogs
+
+# Test for significant correlations
+library(biotools)
+n <- nrow(dogs)
+multcor.test(cordogs, n = n)
+
+# This will give you the same results as multcor.test function, see Lab5-report.Rmd for details
+cor.stat <- cordogs / sqrt((1 - cordogs ^ 2) / (n - 2))
+cor.pvalue <- 2 * (1 - pt(abs(cor.stat), n - 2))
+cor.pvalue
+
+# Draw scatterplot matrix
+library(GGally)
+ggpairs(dogs[, 2:5])
+```
+
+
+Exercise 1
+
+a). Positive, moderately strong and linear correlation with no outliers.
+
+b). (LowC02H and HighC02)
+
+
+
+Boxplots
+
+```{r}
+library(reshape2)
+ggplot(melt(dogs, id.vars = 1), aes(x = variable, y = value)) +
+  geom_boxplot()
+```
+
+Exercise 2
+We can say that HighC02 has lower mean in time of heartbeats compared to the others.
+LowC02H has a higher mean in time of heartbeats, keep in mind, LowC02 has an outlier than impact the median, range.
+Halothane does have an impact, we can see the range and the higher means and medians for heartbeat time.
+
+
+```{r}
+dogs$diff1 <- dogs$HighCO2 - dogs$LowCO2 
+dogs$diff2 <- dogs$HighCO2H - dogs$LowCO2
+dogs$diff3 <- dogs$LowCO2H - dogs$LowCO2
+head(dogs)
+```
+
+(Null) H0: All four anesthetics induce the same mean times between
+heartbeats in dogs is identical to the null hypothesis that the three differences all have
+mean zero
+
+
+
+
+```{r}
+ggplot(melt(dogs, id.vars = 1, measure.vars = 6:8), aes(x = variable, y = value)) +
+  geom_boxplot()
+
+# Compute sample means of the three differences
+dbar <- colMeans(dogs[, 6:8])
+dbar
+
+# Compute sample standard deviations of the three differences
+dstd <- sapply(dogs[, 6:8], sd)
+dstd
+
+# Compute sample covariance matrix of the three differences
+dvar <- var(dogs[, 6:8])
+dvar
+
+# Compute sample correlation matrix of the three differences
+dcorr <- cor(dogs[, 6:8])
+dcorr
+# Check for significant correlations
+multcor.test(dcorr, n = n)
+
+# Draw scatterplot matrix of the three differences
+ggpairs(dogs[, 6:8])
+```
+
+Exercise 3
+
+a). The difference do have good correlations but not has significant as the other correlation matrix did.
+
+b). Diff1 and Diff3 is skewed, diff2 is the closest but not exactly bell-shaped.
+
+c). No, for Hotelling, the assumption is that the data from population i is sampled from population mean vector. Has nothing to do with variance.
+
+
+
+Check for Normality
+
+```{r}
+ggplot(melt(dogs, id.vars = 1, measure.vars = 6:8), aes(sample = value)) +
+  geom_qq() +
+  geom_qq_line() +
+  facet_wrap(~ variable, scales = "free", nrow = 2)
+
+# Univariate Shapiro-Wilk test
+apply(dogs[, 6:8], 2, shapiro.test)
+
+# Multivariate Shapiro-Wilk test
+library(mvShapiroTest)
+mvShapiro.Test(as.matrix(dogs[, 6:8]))
+```
+Exercise 4
+
+Null: is that the sample comes from a normal distribution
+alternative: is that it does not
+
+a). Multivariate p-val=0.001033, since the p-value is less than 0.05, we have strong evidence to accept that the data does not follow a normal multivariate distribution.
+
+b). For diff2, p=0.060  we have weak evidence to accept that the data don't follow a normal multivariate distribution. We can say that diff2 does follow a NMV distribution. (We accept the Null).
+    For diff1, p=0.006 and diff3 p=0.008, we have strong evidence to accept the data don't follow a normal multivariate distribution. (We reject the Null)
+    
+    
+
+
+
+Hotelling
+
+```{r}
+library(DescTools)
+HotellingsT2Test(dogs[, 6:8], mu = c(0, 0, 0))  # T.2 is the F statistic, not T2 statistic!
+```
+
+Exercise 5
+
+p = 3.318e-07
+
+We have strong evidence to reject the idea that the difference between the two vectors of our multivariate data are equal.
+
+
+Confidence Intervals
+
+```{r}
+TB.conf.int <- function(X, level = 0.95)
+{ 
+  # Convert X to a matrix, if it is not a matrix already, from
+  # vectors or data frames.
+  X <- as.matrix(X)
+  
+  # Set n to the number of observations, p to the number of variables.
+  n <- nrow(X)
+  p <- ncol(X)
+  
+  # Stop if arguments are invalid.
+  if (!is.numeric(X))
+  {
+    stop("Data must be numeric")
+  }
+  
+  if (n < p)
+  {
+    stop("Must have at least as many observations as variables")
+  }
+  
+  if (!is.numeric(level) || length(level) != 1 || level <= 0 || level >= 1)
+  {
+    stop("Confidence level must be between 0 and 1")
+  }
+  
+  # Create a matrix A in which each column represents
+  # a difference between two pairs of means
+  np <- p * (p - 1) / 2
+  A <- matrix(c(0), ncol = np, nrow = p)
+  nc <- 0
+  for (i in 1:(p - 1)) {
+    for (j in 1:(p - i)) {
+      A[i, nc + j] <- 1
+      A[i + j, nc + j] <- -1
+    }
+    nc <- nc + (p - i)
+  }
+  
+  # Create a matrix that will hold the confidence intervals.
+  CI <- matrix(NA, 2, ncol(A))
+  rownames(CI) <- c("lower", "upper")
+  colnames(CI) <- colnames(A)
+  
+  CIB <- matrix(NA, 2, ncol(A))
+  rownames(CIB) <- c("lower", "upper")
+  colnames(CIB) <- colnames(A)
+  
+  CIT <- matrix(NA, 2, ncol(A))
+  rownames(CIT) <- c("lower", "upper")
+  colnames(CIT) <- colnames(A)
+  
+  # Find F distribution quantile for T-squared confidence intervals.
+  F <- qf(level, p, n - p)
+  
+  # Find t distribution percentile for Bonferroni confidence intervals
+  alpha <- (1 - level) / 2 / ncol(A)
+  levelB <- 1 - alpha
+  tB <- qt(levelB, n - 1)
+  t <- qt(1 - (1 - level) / 2, n - 1)
+  
+  # Compute the sample covariance matrix of the original variables.
+  C <- cov(X)
+  
+  # Find the confidence intervals for the specified linear combinations.
+  for (i in 1:ncol(A))
+  { 
+    # Find the sample mean and variance of this linear combination.
+    m <- mean(X %*% A[, i])
+    v <- t(A[, i]) %*% C %*% A[, i]
+    
+    # Find the confidence interval for this difference.
+    CI[1, i] <- m - sqrt((p * (n - 1) / n / (n - p)) * F * v)
+    CI[2, i] <- m + sqrt((p * (n - 1) / n / (n - p)) * F * v)
+    
+    CIB[1, i] <- m - tB * sqrt(v / n)
+    CIB[2, i] <- m + tB * sqrt(v / n)
+    
+    CIT[1, i] <- m - t * sqrt(v / n)
+    CIT[2, i] <- m + t * sqrt(v / n)
+  }
+  
+  # Print the confidence intervals.
+  cat(" T-squared simultaneous confidence intervals: \n\n")
+  print(CI)
+  
+  cat("\n\n Bonferroni simultaneous confidence intervals: \n\n")
+  print(CIB)
+  
+  cat("\n\n One-at-a-Time t confidence intervals: \n\n")
+  print(CIT)
+}
+
+# Compute confidence intervals for all pairs of differences between the original four measurements
+TB.conf.int(dogs[, 2:5])
+```
+
+Exercise 6
+
+a). For intervals like (mean1-mean3) and (mean1-mean4), the intervals do not include 0, suggests that these pairs of means show statistically significant differences.
+
+b). There is a narrower confidence interval and is more conservative, they can reduce type 1 errors and won't have any type of violation of assumptions of distributions.
+
+c).No, the one-at-a-time t-intervals do not provide a set of simultaneous 95% confidence intervals. These intervals are calculated for each comparison individually
+
+
+
+```{r}
+# Compute the three effects (CO2 pressure, Halothane, and Interaction) ex 5
+
+C <- matrix(c(0.5, -0.5, 0.5, -0.5, 
+              -0.5, -0.5, 0.5, 0.5,
+              -1, 1, 1, -1), ncol = 4, byrow = T)
+C
+effects <- as.matrix(dogs[, 2:5]) %*% t(C)
+head(effects)
+```
+
+Exercise 7
+
+P-value = 3.318e-07
+
+
+Exercise 8
+
+```{r}
+mean.effects <- colMeans(effects)
+mean.effects
+
+# Compute sample covariance of three effects
+var.effects <- var(effects)
+var.effects
+
+# Create an empty matrix used to store confidence intervals of three effects
+CI.effects <- matrix(NA, 2, ncol(effects))
+rownames(CI.effects) <- c("lower", "upper")
+colnames(CI.effects) <- colnames(effects)
+CI.effects
+
+# Compute Bonferroni confidence intervals of three effects
+n <- nrow(effects)
+level <- 0.95
+levelB <- 1 - (1 - level) / (2 * ncol(effects))  # Bonferroni correction
+tB <- qt(levelB, n - 1)
+CI.effects[1, ] <- mean.effects - tB * sqrt(diag(var.effects) / n)
+CI.effects[2, ] <- mean.effects + tB * sqrt(diag(var.effects) / n)
+CI.effects
+```
+
+The comparison between HighCO2H and HighCO2 (with a lower bound of -51.85 and an upper bound of -8.20) is significantly different from zero since none of the intervals include 0. We can also say the same thing for (75.25, 134.05)
+This suggests that using halothane has a significant effect,compared to those without halothane.

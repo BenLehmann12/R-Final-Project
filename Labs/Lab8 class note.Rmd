@@ -1,0 +1,136 @@
+---
+title: "Lab8"
+author: "Ben Lehmann, Zachary Picchietti"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# *You may help each other, but please do it QUITELY.*
+
+## Data on Ames Livability
+
+Ten rating variables of the livability in American small cities data. The data come from a book that was published in the late 90s, on livability of small cities in the USA. The Des Moines Register featured the book, because Ames was ranked the number 2 best small city in which to live! The study used 10 ratings variables -- Climate, Diversions, Economic, Education, Community, Health, House, Safety, Transportation, Urban -- with each city getting a rating between 0-100 on each of these variables. The scores were combined to give an overall rating for each city, Score.
+
+```{r}
+towns <- read.csv("towns2.csv")
+dim(towns)
+str(towns)
+head(towns)
+
+# Create a column to mark Ames
+towns$ames <- 0
+towns$ames[52] <- 1
+```
+
+## Exercise 1
+
+Examine how the ten ratings variables are correlated with the livability scores (the Score variable) given to the cities. Write a short summary of your findings.
+
+Looking at the Scores, we can say that there is a Strong positive correlation between Score and Education, Community and Health. House, Urban and Climate will have a weaker correlation with Livability Score, House being a negative correlation score. Looking at the graph, Urban vs Score shows a more scattered graph, just like Climate, so it is little more complicated.
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+# Draw scatterplots of Score variable vs. ten rating variables
+towns.melt <- melt(towns, measure.vars = 4:13)
+ggplot(towns.melt, aes(value, Score)) +
+  geom_point() +
+  facet_wrap(~ variable, nrow = 2) +
+  labs(x = NULL)
+
+# Compute correlations between Score variable and ten rating variables
+cor(towns$Score, towns[, 4:13])
+```
+
+## Exercise 2
+
+All the scores are measured on a scale of 0-100, so why is it still necessary to use the correlation matrix, or standardize the data, before doing a principle component analysis (PCA)? (Hint: Compute some summary statistics or make some plots.)
+
+Variables with different Scales of Standard Deviations and Variances can skew our data analysis, we would need to standardize the data.If the variables have similar units and the goal is to analyze the variance directly, the covariance matrix can be used in PCA.If variables are on different scales, it is better to use the correlation matrix, which represents the standardized relationships between variables
+
+
+
+```{r}
+# Draw scatterplot matrix
+library(GGally)
+ggpairs(towns[, 4:14], upper = list(continuous = wrap("cor", size = 2)),
+        lower = list(continuous = wrap("points", stroke = 0, size = .5)))
+
+# Compute sample sd 
+sapply(towns[, 4:13], sd)
+
+# Draw boxplot
+ggplot(towns.melt, aes(variable, value)) +
+  geom_boxplot() +
+  labs(x = NULL, y = NULL)
+```
+
+The best function to use in R is prcomp which handles a large number of variables better than other functions. The scale argument tells R to use the correlation matrix (TRUE) or covariance matrix (FALSE, default), and the retx argument tells R to compute the principal component scores and save them in the object that is created by the prcomp function.
+
+The output has several main components: sdev contains the square root of the eigenvalues, rotation are the eigenvectors, and x contains the PC scores.
+
+## Exercise 3
+
+Present a summary of the PCA including the table of eigenvectors, a list of eigenvalues (variance), and cumulative percentage of total variance explained by the principal components. (Be sure to make your output readable, e.g. rounding digits appropriately.) Make a scree plot.
+
+```{r}
+# PCA
+towns.pca <- prcomp(towns[, 3:13], scale. = T)  # include Population variable
+summary(towns.pca)
+round(towns.pca$rotation, 4)
+
+# Draw scree plot
+ggplot(data.frame(x = 1:11, y = towns.pca$sdev ^ 2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "No. of PCs", y = "Component Variance (eigenvalue)", title = "Scree Plot")
+```
+
+(a) How many PCs would you need to use to explain 80% of the total variation?
+
+We would need 6 PCs to explain 80% of total variation
+
+(b) Explain how the Cumulative Proportion row of the summary of the PC was calculated.
+
+Cumulative Proportions is the summation of Proportions by each PC
+
+## Exercise 4
+
+(a) Explain how the variables contribute to the first two principal components.
+
+PC1 contributes to Climate, Urban and House variables in a positive way, but has negative contribution to the others
+PC2 contributes to Diversions, Economic, Health, House variables in a positive way, but has negative contribution to the others
+
+PC1 explains 30.6% of the variance while PC2 explains 48.3% of the Variance.
+
+(b) Using three pieces of information, where the elbow is in the scree plot, the proportion of total variation, and the interpretation of the PCs, make an argument for how many PCs would you recommend to summarise this data?
+
+Looking at the plot, the elbow is at the 3rd or 4th PC, the proportion is 0.10, the cumulative is 0.5890. The 3rd PC makes up 59% of the variance of the data. We would recommend using 3 PCS to summarise the data, without having too much error.
+
+## Exercise 5
+
+Compare the scores for the first principal component with the Score variable in the data (this is the rating the article gives for each city). Which city would be rated first using the Score variable? Which city would be rated first using the scores for the first principal component? (You could make a plot of the Score variable against PC1, and compute the correlation between the two variables.) Do the two approaches give cities similar ratings? (You may need to multiple the scores for the first principal component by -1).
+
+```{r}
+# Draw scatterplot of PC1 score vs. Score variable
+ggplot(data.frame(x = towns$Score, y = towns.pca$x[, 1], Ames = factor(towns$ames)), aes(x, y, color = Ames)) +
+  geom_point() +
+  labs(x = "Score", y = "PC1 score")
+
+# Compute correlation between Score variable and PC1 score
+cor(towns$Score, towns.pca$x[, 1])
+
+# Sort by Score variable (decreasing order)
+head(towns$City[order(towns$Score, decreasing = T)])
+# Sort by PC1 score (increasing order)
+head(towns$City[order(towns.pca$x[, 1], decreasing = F)])
+```
+
+For Score, it would be Mt. Vernon, WA 
+For PCA 1, it would be Minot, ND
+
+I would not come to believe because we end up with different cities in the rank.

@@ -1,0 +1,333 @@
+---
+title: "Lab5"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# *You may help each other, but please do it QUITELY.*
+
+## Data
+
+These data come from a study of the effects of four different anesthetics on dogs reported in the Johnson and Wichern book, Applied Multivariate Analysis. Each of four anesthetics was used on each of the 19 dogs in the study. There was a washout period (several weeks) between the use of one anesthetic and the use of another anesthetic. The anesthetics are
+
+- HighCO2: high CO2 pressure with no halothane
+- LowCO2: low CO2 pressure with no halothane
+- HighCO2H: high CO2 pressure with halothane
+- LowCO2H: low CO2 pressure with halothane
+
+The average time between heartbeats during surgery was measured for each dog under each anesthetic. One objective of the study was to determine if any of these anesthetics induce different mean heart rates (different mean times between heartbeats) than other anesthetics.
+
+```{r}
+dogs <- read.csv("dogs.csv")
+head(dogs)
+str(dogs)
+```
+
+## Examine Correlations
+
+```{r}
+# Compute the matrix of correlations
+cordogs <- cor(dogs[, 2:5])
+cordogs
+
+# Test for significant correlations
+library(biotools)
+n <- nrow(dogs)
+multcor.test(cordogs, n = n)
+
+# This will give you the same results as multcor.test function, see Lab5-report.Rmd for details
+cor.stat <- cordogs / sqrt((1 - cordogs ^ 2) / (n - 2))
+cor.pvalue <- 2 * (1 - pt(abs(cor.stat), n - 2))
+cor.pvalue
+
+# Draw scatterplot matrix
+library(GGally)
+ggpairs(dogs[, 2:5])
+```
+
+Exercise 1
+
+(a) In one or two sentences, summarize the results in the sample correlation matrix.
+
+(b) Which correlations are statistically significant at the 0.05 level of significance?
+
+## Box Plots
+
+
+```{r}
+new_melt <- melt(dogs, id.vars = 1)
+```
+
+
+```{r}
+# Draw box plots of the four measurements
+library(reshape2)
+ggplot(melt(dogs, id.vars = 1), aes(x = variable, y = value)) +
+  geom_boxplot()
+```
+
+Exercise 2
+
+What do the box plots indicate about potential differences in mean times between heartbeats induced by the four anesthetics? Does level of CO2 or use of halothane appear to have the larger effect on mean time between heartbeats?
+
+## Differences
+
+Compute the differences between mean times between heartbeats for each anesthetic versus the anesthetic consisting of the low level of CO2 and no halothane (LowCO2).
+
+```{r}
+# Create new columns with the differences
+dogs$diff1 <- dogs$HighCO2 - dogs$LowCO2 
+dogs$diff2 <- dogs$HighCO2H - dogs$LowCO2
+dogs$diff3 <- dogs$LowCO2H - dogs$LowCO2
+head(dogs)
+```
+
+## Null Hypothesis of Equal Means
+
+The null hypothesis that all four anesthetics induce the same mean times between heartbeats in dogs is identical to the null hypothesis that the three differences all have mean zero.
+
+## Examine the Differences Data
+
+Use box plots to compare the distributions of the values for the differences in mean times between heartbeats. Summarize the information provided by the box plots about the centers, spreads, and shapes of the distributions of differences.
+
+```{r}
+# Draw box plots of the three differences
+ggplot(melt(dogs, id.vars = 1, measure.vars = 6:8), aes(x = variable, y = value)) +
+  geom_boxplot()
+
+# Compute sample means of the three differences
+dbar <- colMeans(dogs[, 6:8])
+dbar
+
+# Compute sample standard deviations of the three differences
+dstd <- sapply(dogs[, 6:8], sd)
+dstd
+
+# Compute sample covariance matrix of the three differences
+dvar <- var(dogs[, 6:8])
+dvar
+
+# Compute sample correlation matrix of the three differences
+dcorr <- cor(dogs[, 6:8])
+dcorr
+# Check for significant correlations
+multcor.test(dcorr, n = n)
+
+# Draw scatterplot matrix of the three differences
+ggpairs(dogs[, 6:8])
+```
+
+Exercise 3
+
+(a) Summarize the information about associations among the three differences provided by the scatterplots and the analysis of correlations between differences.
+
+(b) Are the estimates of density functions shown on the diagonal of the scatterplot matrix produced by the ggpairs function similar to "bell shaped" density functions? If not, describe how they differ from symmetric, bell-shaped density functions.
+
+(c) The box plots and estimated covariance matrix indicate that the variances of the three differences are about the same? Is this assumption needed to use the Hotelling T-squared test to test the null hypothesis that population means are zero for all three differences?
+
+## Check Normality for the Distributions of Differences
+
+Create a normal probability plot for the data for each difference. Compute the Shapiro-Wilk test of normality for each of the three differences. Also compute the Shapiro-Wilk test for multivariate normality.
+
+```{r}
+# QQ plot of the three differences
+ggplot(melt(dogs, id.vars = 1, measure.vars = 6:8), aes(sample = value)) +
+  geom_qq() +
+  geom_qq_line() +
+  facet_wrap(~ variable, scales = "free", nrow = 2)
+
+# Univariate Shapiro-Wilk test
+apply(dogs[, 6:8], 2, shapiro.test)
+
+# Multivariate Shapiro-Wilk test
+library(mvShapiroTest)
+mvShapiro.Test(as.matrix(dogs[, 6:8]))
+```
+
+## Exercise 4
+
+(a) What can you conclude from the Shapiro-Wilk test for multivariate normality for the joint distribution of the three differences?
+
+(b) What can you conclude from the Shapiro-Wilk tests for univariate normality for the distribution of each of the three differences?
+
+## Hotelling T-squared Test
+
+Now apply the one-sample Hotelling T-squared test (DescTools package) to test the null hypothesis that the population mean is zero for all three differences. Note that this is equivalent to the null hypothesis that the mean stiffness value is the same for all four methods of measuring board stiffness.
+
+```{r}
+# Apply Hotelling T-squared test to the three differences
+library(DescTools)
+HotellingsT2Test(dogs[, 6:8], mu = c(0, 0, 0))  # T.2 is the F statistic, not T2 statistic!
+```
+
+## Exercise 5
+
+Report the p-value for the Hotelling T-squared test. Assuming that the T-squared provided a reliable p-value, state your conclusion.
+
+## Simultaneous Confidence Intervals
+
+Compute simultaneous 95% confidence intervals for the differences in all six possible pairs of population means for the four anesthetics. Calculate simultaneous 95% confidence intervals in two ways (1) Bonferroni adjusted t-intervals and (2) T-squared intervals. The following function also computes one-at-a-time 95% confidence intervals that do not provide simultaneous 95% confidence.
+
+```{r}
+TB.conf.int <- function(X, level = 0.95)
+{ 
+  # Convert X to a matrix, if it is not a matrix already, from
+  # vectors or data frames.
+  X <- as.matrix(X)
+  
+  # Set n to the number of observations, p to the number of variables.
+  n <- nrow(X)
+  p <- ncol(X)
+  
+  # Stop if arguments are invalid.
+  if (!is.numeric(X))
+  {
+    stop("Data must be numeric")
+  }
+  
+  if (n < p)
+  {
+    stop("Must have at least as many observations as variables")
+  }
+  
+  if (!is.numeric(level) || length(level) != 1 || level <= 0 || level >= 1)
+  {
+    stop("Confidence level must be between 0 and 1")
+  }
+  
+  # Create a matrix A in which each column represents
+  # a difference between two pairs of means
+  np <- p * (p - 1) / 2
+  A <- matrix(c(0), ncol = np, nrow = p)
+  nc <- 0
+  for (i in 1:(p - 1)) {
+    for (j in 1:(p - i)) {
+      A[i, nc + j] <- 1
+      A[i + j, nc + j] <- -1
+    }
+    nc <- nc + (p - i)
+  }
+  
+  # Create a matrix that will hold the confidence intervals.
+  CI <- matrix(NA, 2, ncol(A))
+  rownames(CI) <- c("lower", "upper")
+  colnames(CI) <- colnames(A)
+  
+  CIB <- matrix(NA, 2, ncol(A))
+  rownames(CIB) <- c("lower", "upper")
+  colnames(CIB) <- colnames(A)
+  
+  CIT <- matrix(NA, 2, ncol(A))
+  rownames(CIT) <- c("lower", "upper")
+  colnames(CIT) <- colnames(A)
+  
+  # Find F distribution quantile for T-squared confidence intervals.
+  F <- qf(level, p, n - p)
+  
+  # Find t distribution percentile for Bonferroni confidence intervals
+  alpha <- (1 - level) / 2 / ncol(A)
+  levelB <- 1 - alpha
+  tB <- qt(levelB, n - 1)
+  t <- qt(1 - (1 - level) / 2, n - 1)
+  
+  # Compute the sample covariance matrix of the original variables.
+  C <- cov(X)
+  
+  # Find the confidence intervals for the specified linear combinations.
+  for (i in 1:ncol(A))
+  { 
+    # Find the sample mean and variance of this linear combination.
+    m <- mean(X %*% A[, i])
+    v <- t(A[, i]) %*% C %*% A[, i]
+    
+    # Find the confidence interval for this difference.
+    CI[1, i] <- m - sqrt((p * (n - 1) / n / (n - p)) * F * v)
+    CI[2, i] <- m + sqrt((p * (n - 1) / n / (n - p)) * F * v)
+    
+    CIB[1, i] <- m - tB * sqrt(v / n)
+    CIB[2, i] <- m + tB * sqrt(v / n)
+    
+    CIT[1, i] <- m - t * sqrt(v / n)
+    CIT[2, i] <- m + t * sqrt(v / n)
+  }
+  
+  # Print the confidence intervals.
+  cat(" T-squared simultaneous confidence intervals: \n\n")
+  print(CI)
+  
+  cat("\n\n Bonferroni simultaneous confidence intervals: \n\n")
+  print(CIB)
+  
+  cat("\n\n One-at-a-Time t confidence intervals: \n\n")
+  print(CIT)
+}
+
+# Compute confidence intervals for all pairs of differences between the original four measurements
+TB.conf.int(dogs[, 2:5])
+```
+
+Note that this function is applied to the four original variables, not to differences between the variables. The order in which the confidence intervals are printed is: mean1-mean2, mean1-mean3, mean1-mean4, mean2-mean3, mean2-mean4, mean3-mean4.
+
+## Exercise 6
+
+(a) What did you learn from the Bonferroni intervals about differences in mean times between heartbeats for the four anesthetics?
+
+(b) Why is it better to use the Bonferroni intervals than the T-squared intervals in this case?
+
+(c) Look at the six one-at-a-time t-intervals, for the differences in the six pairs of means. Note that these intervals are shorter than the Bonferroni intervals. Do these intervals provide a set of simultaneous 95% confidence intervals for the differences in the six possible pairs of population means? Explain.
+
+## An Alternative Set of Comparisons
+
+Instead of comparing the mean response for each anesthetic to the mean response for a particular anesthetic, in this case low CO2 pressure with no halothane, other linear combinations of means could be set to zero to produce the null hypothesis that mean time between heartbeats is the same for all four anesthetics. Consider the following:
+
+- CO2 pressure effect: ((high CO2 pressure)+(high CO2 Pressure with halothane))/2 - ((low CO2 pressure) + (lowCO2 pressure with halothane))/2
+- Halothane effect: ((high CO2 pressure with halothane)+(low CO2 pressure with halothane))/2 -((high CO2 pressure)+(low CO2 pressure))/2
+- Interaction: ((high CO2 pressure with halothane) - (low CO2 pressure with halothane)) - ((high CO2 pressure)-(low CO2 pressure))
+
+Corresponding linear combinations of mean times between heartbeats can be computed for each dog and then averaged across dogs to estimate the corresponding linear combinations of means.
+
+```{r}
+# Compute the three effects (CO2 pressure, Halothane, and Interaction)
+C <- matrix(c(0.5, -0.5, 0.5, -0.5, 
+              -0.5, -0.5, 0.5, 0.5,
+              -1, 1, 1, -1), ncol = 4, byrow = T)
+C
+effects <- as.matrix(dogs[, 2:5]) %*% t(C)
+head(effects)
+```
+
+## Exercise 7
+
+Test the null hypothesis that the three comparisons of population means defined above are all zero. Explain why this equivalent to testing that the mean time between heartbeats is the same for all four anesthetics. Report the p-value for the test and state your conclusion. How do these results compare to the results reported in exercise 5?
+
+## Exercise 8
+
+Use the Bonferroni method to compute simultaneous 95% confidence intervals for the three comparisons of mean times between heartbeats. Which comparisons are significantly different from zero? In one or two sentences, summarize what these results imply about the effect of using or not using halothane and the effect of different levels of CO2?
+
+```{r}
+# Compute sample means of three effects
+mean.effects <- colMeans(effects)
+mean.effects
+
+# Compute sample covariance of three effects
+var.effects <- var(effects)
+var.effects
+
+# Create an empty matrix used to store confidence intervals of three effects
+CI.effects <- matrix(NA, 2, ncol(effects))
+rownames(CI.effects) <- c("lower", "upper")
+colnames(CI.effects) <- colnames(effects)
+CI.effects
+
+# Compute Bonferroni confidence intervals of three effects
+n <- nrow(effects)
+level <- 0.95
+levelB <- 1 - (1 - level) / (2 * ncol(effects))  # Bonferroni correction
+tB <- qt(levelB, n - 1)
+CI.effects[1, ] <- mean.effects - tB * sqrt(diag(var.effects) / n)
+CI.effects[2, ] <- mean.effects + tB * sqrt(diag(var.effects) / n)
+CI.effects
+```

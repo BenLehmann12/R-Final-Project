@@ -1,0 +1,279 @@
+---
+title: "Lab6"
+author: "Ben Lehmann,Zachary Picchietti"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Data on the effect of rolling temperature on the breaking strength of steel tubes were taken from an example in the Johnson and Wichern book, Applied Multivariate Analysis. Two measurements of breaking strength (yield point (X1) and ultimate strength (X2) were taken on each of 5 samples of steel made with the lower rolling temperature and each of 7 samples made with the higher rolling temperature. The objectives are to examine the data and test the null hypothesis that the vectors of means for yield point and ultimate strength are the same for the two rolling temperatures used to produce this type of steel. The data are posted as steel.csv. Copy that file to your project directory. This example is also presented in the lecture notes. The following R chunk reads the data into a data frame in R, provides labels for the variables, and displays the data file.
+
+```{r}
+steel <- read.csv("steel.csv")
+steel
+
+# Sample mean and covariance of group 1
+xbar1 <- colMeans(steel[steel$temp == 1, -1])
+xbar1
+xvar1 <- var(steel[steel$temp == 1, -1])
+xvar1
+
+# Sample mean and covariance of group 2
+xbar2 <- colMeans(steel[steel$temp == 2, -1])
+xbar2
+xvar2 <- var(steel[steel$temp == 2, -1])
+xvar2
+
+# Scatterplot of two groups
+library(ggplot2)
+ggplot(steel, aes(yield, strength)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  facet_wrap(~ temp)
+```
+
+Check normality condition separately for each temperature.
+
+```{r}
+# Check normality for each group
+apply(steel[steel$temp == 1, -1], 2, shapiro.test)
+apply(steel[steel$temp == 2, -1], 2, shapiro.test)
+# library(mvShapiroTest)
+# mvShapiro.Test(as.matrix(steel[steel$temp == 1, -1]))
+# mvShapiro.Test(as.matrix(steel[steel$temp == 2, -1]))
+```
+
+Apply Box's M-test to test the null hypothesis of homogeneous covariance matrices. This test is sensitive to the lack of normality and has a tendency to falsely reject the null hypothesis of homogeneous covariance matrices just due to lack of normality. First install the biotools package. You can use install.packages("biotools") to do this, but run the install in the console window, not inside an R chunk. (Not required if "biotools" cannot work.)
+
+```{r}
+# Check homogeneity of covariance matrices
+library(biotools)
+boxM(steel[, -1], steel$temp)
+
+# Hotelling T-squared test
+library(DescTools)
+t2test <- HotellingsT2Test(steel[steel$temp == 1, -1], steel[steel$temp == 2, -1])  # T.2 is F-statistic
+t2test
+```
+
+## Exercise 1
+
+(a) The null hypothesis of the two-sample Hotelling's T-squared test is that the population mean vectors of two groups are equal. 
+
+(b) F-value = 10.27, DF1=2, DF2 = 9
+
+(c) Since our p-values is less than 0.05 we have good evidence to reject the Null Hypothesis, therefore the population mean vectors of two groups are not equal.
+
+(d) We have a small sample size so we could say that Hotelling would not work.
+
+## Simultaneous Confidence Intervals
+
+Use the Bonferroni method to compute simultaneous 95% confidence intervals for the difference in yield point population means and the difference in the ultimate strength population means for the two rolling temperatures.
+
+```{r}
+# Compute sample sizes and number of variables
+n1 <- nrow(steel[steel$temp == 1, -1])
+n2 <- nrow(steel[steel$temp == 2, -1])
+p <- ncol(steel[, -1])
+
+# Enter confidence level
+level <- 0.95
+
+# Compute degrees of freedom and the multipliers
+df1 <- p
+df2 <- n1 + n2 - p - 1
+df3 <- n1 + n2 - 2
+c_T2 <- sqrt((n1 + n2 - 2) * p * qf(level, df1, df2) / (n1 + n2 - p - 1))
+levelt <- 1 - (1 - level) / 2
+levelb <- 1 - (1 - level) / (2 * p)
+c_bon <- qt(levelb, df3)
+
+# Compute pooled covariance matrix 
+vpool <- ((n1 - 1) * xvar1 + (n2 - 1) * xvar2) / (n1 + n2 - 2)
+
+#  Compute Hotelling's T-squared CI
+lower_limit <- (xbar1 - xbar2) - c_T2 * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+upper_limit <- (xbar1 - xbar2) + c_T2 * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+rbind(lower_limit, upper_limit)
+
+# Compute Bonferroni CI
+lower_limit <- (xbar1 - xbar2) - c_bon * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+upper_limit <- (xbar1 - xbar2) + c_bon * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+rbind(lower_limit, upper_limit)
+
+# Compute one-at-a-time CI
+lower_limit <- (xbar1 - xbar2) - qt(levelt, df3) * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+upper_limit <- (xbar1 - xbar2) + qt(levelt, df3) * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+rbind(lower_limit, upper_limit)
+```
+
+## Permutation Test
+
+If there are clear evidence that samples may not be from normal distribution and the sample sizes are small, Hotelling's T-square test may not be valid. In this case, we can use permutation test. Permutation test is particularly useful for comparison between two or more populations. The key of permutation test is to create simulated data under null hypotheses, and evaluate the distribution of the test statistic using those simulated data under null hypotheses. P-value of the test is determined by comparing the actual statistic under the original data with its distribution under the simulated data. This idea of permutation test is widely used in many scientific studies where data distribution is unknown, the test statistic is complicated or its distribution is unclear.
+
+
+```{r}
+# Compute observed T2 statistic
+T2.observed <- t2test$statistic[1] * (p * (n1 + n2 - 2)) / (n1 + n2 - p - 1)
+
+set.seed(475)  # SET SEED! Because we use "sample" function after.
+HT2.permute <- c()
+
+# Compute permuted T2 statistics for 500 times
+for (i in 1:500) {
+  sample1 <- sample(1:12, n1)
+  sample2 <- setdiff(1:12, sample1)
+  X.permute <- steel[sample1, -1]  # simulated group1 data
+  Y.permute <- steel[sample2, -1]  # simulated group2 data
+  HT2.permute[i] <- HotellingsT2Test(X.permute, Y.permute)$statistic[1] * (p * (n1 + n2 - 2)) / (n1 + n2 - p - 1)
+}
+
+# Draw histogram of permuted T2 statistics, and mark the observed T2 statistic
+ggplot(data.frame(HT2.permute), aes(HT2.permute)) +
+  geom_histogram() +
+  geom_vline(xintercept = T2.observed, color = "red")
+
+# Compute the p-value of permutation test
+pvalue.permute <- mean(HT2.permute > T2.observed)
+pvalue.permute
+```
+
+## Exercise 2
+
+What is the p-value of the permutation test for the hypotheses the two groups of steel have the same mean? What is your conclusion?
+
+P-value = 0.012
+We have good evidence to reject the null hypothesis.
+
+## Data for the college students study
+
+A MANOVA analysis will be used to compare vectors of mean scores on four different tests (aptitude, math, language, gen_know) for three populations of college students in the Dominican Republic: (1) technology students, (2) architecture students, and (3) medical technology students). The data are posted as morel.csv. Copy this data file to your project directory. Enter the data into a data frame in R. List the first six lines of data. Convert the group variable into a factor so it can be used in models as a classification variable.
+
+Use the "lm" function to fit a one-way ANOVA to each of the response variables
+
+```{r}
+morel <- read.csv("morel.csv")
+morel$group <- as.factor(morel$group)
+str(morel)
+head(morel)
+
+# Fit linear regression and one-way ANOVA for each response variable
+fit.lm <- lm(cbind(aptitude, math, language, gen_know) ~ group, data = morel)
+summary(fit.lm)
+```
+
+Note that by default, R sets the effect for the first level of the group factor equal to zero. If you want to do the same as SAS, you have to use the contrasts option to reset the default to set the effect for the last level of the group factor to zero.
+
+```{r}
+# Fit linear regression and one-way ANOVA for each response variable,
+# use contrasts same as in SAS
+fit.lmsas <- lm(cbind(aptitude, math, language, gen_know) ~ group, data = morel,
+                contrasts = list(group = contr.SAS))
+summary(fit.lmsas)
+
+# Compute the F-test for the Wilks criterion
+library(car)
+fit.manova <- Manova(fit.lm)  # Manova, not monova!
+summary(fit.manova)
+```
+
+## Exercise 3
+
+(a) In the context of the student testing study, state the null and alternative hypotheses for the F-test computed from Wilks criterion and the MANOVA table.
+
+Null:The Data comes from a Multivariate Normal Distribution
+Alternative: The Data does not come from a Multivariate Normal Distribution.
+
+Null: There is no significant difference in the mean vectors of the four dependent variables across the different groups.
+Alternative: There is a significant difference in the mean vectors of the four dependent variables across the different groups.
+
+(b) Report the value of Wilks criterion, the corresponding F-statistic, its degrees of freedom, and the p-value. State your conclusion.
+Criterion: 0.5434483
+F-stat: 6.773
+DF = 8
+P-value: 1.3834e-07
+
+Since the p-value is extremely small (1.3843e-07), it is much less than the typical significance level of 0.05. Therefore, we reject the null hypothesis. This means that there is a statistically significant difference in the mean vectors of the four dependent variables (aptitude, math, language, and general knowledge) between the groups.
+
+Since the p-value is extremely small (1.3843e-07), it is much less than the typical significance level of 0.05. Therefore, we reject the null hypothesis. Our Data does not come from a Multivariate Normal Distribution.
+
+## Web Scraping - rvest package
+
+```{r}
+# Read HTML from URL
+library(rvest)
+url <- "https://www.the-numbers.com/weekend-box-office-chart"
+html <- read_html(url)
+html
+```
+
+"html_table" extracts all tables from the sourced html into a list of data frames:
+
+```{r}
+# Read all tables from HTML
+tables <- html_table(x = html, fill = T)
+length(tables)
+tables
+
+# Clean up the table
+info <- tables[[2]]
+dim(info)
+str(info)
+head(info)
+tail(info)
+colnames(info)[1:2] <- c("Rank", "Rank.Last.Week")
+info
+
+# Parse character to number
+library(readr)
+info$Gross.num <- parse_number(info$Gross)
+```
+
+Automatic web Scraping:
+
+```{r}
+# Auto-generate the URLs
+date.start <- as.Date("2023-06-01")
+date <- date.start + 0:92
+link <- paste0("https://www.the-numbers.com/box-office-chart/daily/", gsub("-", "/", date))
+
+# Save tables, numbers of movies, total gross for all dates
+table.all <- list()  # save all tables
+movie.num <- c()     # save number of movies
+total.gross <- c()   # save total gross
+
+for (i in 1:length(date)) {
+  link.temp <- link[i]
+  html <- read_html(link.temp)
+  info <- html_table(x = html, fill = T)[[2]]
+  n <- nrow(info)
+  info.clean <- info[1:(n - 2), ]  # remove the last two rows
+  colnames(info.clean)[1:2] <- c("Rank", "Rank.Last.Week")
+  info.clean$Gross.num <- parse_number(info.clean$Gross)
+  table.all[[i]] <- info.clean
+  movie.num[i] <- nrow(info.clean)
+  total.gross[i] <- sum(info.clean$Gross.num)
+}
+
+# Visualize the total gross over time
+ggplot(data.frame(date, movie.num, total.gross), aes(date, total.gross)) +
+  geom_line()
+```
+
+## Exercise 4
+
+(a) We chose the week of August 23rd, Deadpool vs Wolverine was the highest Grossing Film.
+
+(b) The Variables are Movie Title, Distributor, Gross, %LW, Theaters, Theaters Change, Per Theater, Total Gross, Weekends in Release
+
+(c) Extract the daily data in an automatic way for every day from 2023/06/01 to 2023/09/01.
+
+(d) Make some graphic visualization of the data. What can you conclude?
+
+From the Graph, there is a large Jump in total Gross in the end of July, but we see the total gross start to go down again from August to September. We see a slump near the end of August.
