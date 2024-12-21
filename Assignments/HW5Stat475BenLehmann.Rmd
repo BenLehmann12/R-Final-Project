@@ -1,0 +1,562 @@
+---
+title: "Stat475HW5Lehmann"
+author: "Ben Lehmann"
+date: "2024-11-16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Question 1
+
+```{r}
+wine <- read.csv('winequality.csv')
+```
+
+
+```{r}
+red_wine <- subset(wine, wine.type == "red")[, -c(12, 13)]
+white_wine <- subset(wine, wine.type == "white")[, -c(12, 13)]
+```
+
+
+a).
+
+```{r}
+library(DescTools)
+
+n_red <- nrow(red_wine)
+n_white <- nrow(white_wine)
+p <- ncol(red_wine)
+t2test <- HotellingsT2Test(red_wine, white_wine)
+t2test
+
+t2test$statistic * p * (n_red + n_white - 2) / (n_red + n_white - p - 1)
+```
+
+Because the p-value is less than 0.05, the data provides sufficient evidence to reject the null hypothesis, which means that the mean that the 11 physicochemical variables do not have the same means for the red and white wines.
+
+
+
+b).
+
+```{r}
+library(biotools)
+boxM(wine[,1:11], wine$wine.type) 
+```
+
+
+```{r}
+g <- 2
+level <- 0.95
+m <- p * g * (g - 1) / 2
+levelb <- 1 - (1 - level) / (2 * m)
+c_bon <- qt(levelb, df = n_red + n_white - g)
+
+mean_red <- colMeans(red_wine)
+mean_white <- colMeans(white_wine)
+
+
+var_red <- var(red_wine)
+var_white <- var(white_wine)
+
+
+lower_redvwhite <- mean_red - mean_white - c_bon * sqrt(diag(var_red / n_red + var_white / n_white))
+upper_redvwhite <- mean_red - mean_white + c_bon * sqrt(diag(var_red / n_red + var_white / n_white))
+lower_whitevred <- mean_white - mean_red - c_bon * sqrt(diag(var_white / n_white + var_red / n_red))
+upper_whitevred <- mean_white - mean_red + c_bon * sqrt(diag(var_white / n_white + var_red / n_red))
+
+rbind(lower_redvwhite, upper_redvwhite, lower_whitevred, upper_whitevred)
+```
+
+
+
+With Pooling
+
+```{r}
+mean_diff <- colMeans(red_wine) - colMeans(white_wine)
+
+# Calculate the standard errors
+n_red <- nrow(red_wine)
+n_white <- nrow(white_wine)
+pooled_var <- (var(red_wine) * (n_red - 1) + var(white_wine) * (n_white - 1)) / (n_red + n_white - 2)
+se_diff <- sqrt(diag(pooled_var) * (1/n_red + 1/n_white))
+
+# Bonferroni correction
+alpha <- 0.05
+k <- length(mean_diff)
+t_crit <- qt(1 - alpha / (2 * k), df = n_red + n_white - 2)
+
+# Confidence intervals
+lower_bound <- mean_diff - t_crit * se_diff
+upper_bound <- mean_diff + t_crit * se_diff
+
+# Combine results into a data frame
+bonferroni_ci <- rbind(
+  Lower_Bound = lower_bound,
+  Upper_Bound = upper_bound)
+
+# Print the Bonferroni confidence intervals
+print(bonferroni_ci)
+```
+
+Looking at both pooling and non-pooling, we can say that, All of the intervals are significant because all of our CIs are below 0 or above 0).
+
+Question 2)
+
+```{r}
+library(car)
+library(mvShapiroTest)
+
+fbi <- read.csv('fbi.csv')
+```
+
+
+
+a).
+
+
+```{r}
+year_1966 <- subset(fbi, Year=='1966')
+year_1976 <- subset(fbi, Year=='1976')
+year_1986 <- subset(fbi, Year=='1986')
+year_1996 <- subset(fbi, Year=='1996')
+year_2006 <- subset(fbi, Year=='2006')
+year_2016 <- subset(fbi, Year=='2016')
+```
+
+
+For 1966
+
+```{r}
+mvShapiro.Test(as.matrix(year_1966[, 4:10]))
+```
+
+
+For 1976
+
+```{r}
+mvShapiro.Test(as.matrix(year_1976[, 4:10]))
+```
+
+For 1986
+
+```{r}
+mvShapiro.Test(as.matrix(year_1986[, 4:10]))
+```
+
+For 1996
+
+```{r}
+mvShapiro.Test(as.matrix(year_1996[, 4:10]))
+```
+
+For 2006
+
+```{r}
+mvShapiro.Test(as.matrix(year_2006[, 4:10]))
+```
+
+For 2016
+
+```{r}
+mvShapiro.Test(as.matrix(year_2016[, 4:10]))
+```
+
+Conclusion:
+
+Since the p-value for each year is less than 0.05, we have strong evidence to reject the null hypothesis, therefore, the data does not follow multivariate normal distribution.
+
+Because of our p-value for each test of the years, it wouldn't be valid to to conduct statistical inference for this data set
+since we now know the data does not follow the MVN distribution.
+
+b).
+
+Null: The mean vectors of crime rates are the same across all years
+Alternative: The mean vectors of crime rates are not the same across all years
+
+```{r}
+mod <- lm(cbind(Aggravated.assault, Burglary, Larceny.theft, Legacy.rape, Motor.vehicle.theft, Murder, Robbery) ~ Year, data = fbi)
+summary(Manova(mod))
+```
+
+With Factoring
+
+```{r}
+crime_data <- fbi[, c(4,5,6,7,8,9,10)]
+years <- factor(fbi$Year)
+
+model <- lm(as.matrix(crime_data) ~ years)
+summary(Manova(model))
+```
+
+attempt 1:
+p-value < 2.22e-16, test-stat = 52.21
+
+attempt 2:
+p-value < 2.22e-16, test-stat = 20.43
+
+Same Conclusion
+
+The p-value is extremely small, less than 0.05, and the null hypothesis of equal mean vectors for the seven types of crimes can be rejected
+
+c).
+
+```{r}
+fbi_2016 <- subset(fbi, Year == '2016')
+new_fbi <- fbi_2016[,c(4,5,6,7,8,9,10)]
+```
+
+
+
+```{r}
+
+pca_result <- prcomp(new_fbi, scale = TRUE)
+pca_scores <- data.frame(pca_result$x[, 1:2])
+pca_scores$States <- fbi[fbi$Year == 2016, "State"]
+```
+
+
+
+```{r}
+summary(pca_result)
+```
+
+PC1 explains 54.46% of the variance.
+PC2 explains 18.14% of the variance.
+
+PC1 and PC2 account for 72.60% of the total variance of the dataset
+
+PC1: This component captures the largest amount of variation in the data. It likely represents the most significant underlying pattern or trend in your dataset.
+PC2: This component captures the second largest amount of variation, orthogonal to PC1. It represents another important pattern that is not captured by PC1.
+
+
+```{r}
+library(ggplot2)
+ggplot(pca_scores, aes(x = PC1, y = PC2, label = States)) +
+  geom_point() +
+  geom_text(vjust = 1.5, size = 3) +
+  labs(title = "PCA of Crime Rates (2016)", x = "PC1", y = "PC2")
+```
+
+The First 2 PCs make up 72.6% of total variation of the dataset
+
+Question 3)
+
+```{r}
+records <- read.csv('records.men.csv')
+```
+
+
+
+```{r}
+records.pca <- prcomp(subset(records, select = -c(Country)), scale. = T)
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(data.frame(x = 1:8, y = records.pca$sdev^2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "No. of PCs", y = "Component Variance (eigenvalue)", title = "Scree Plot")
+```
+
+
+I would say 2 PCs
+
+b).
+
+
+Get the loadings
+
+```{r}
+records.pca$loadings <- records.pca$rotation%*%diag(records.pca$sdev)
+```
+
+
+MLE
+
+```{r}
+sapply(1:3, function(f)
+    factanal(records[,c(2,3,4,5,6,7,8,9)], factors = f, method ="mle")$PVAL)
+```
+
+Communality
+
+```{r}
+records.pca$loadingf <- records.pca$loadings %*% diag(records.pca$sdev)
+records_com <- diag(records.pca$loadingf[, 1:2] %*% t(records.pca$loadingf[, 1:2]))
+records_com
+```
+
+
+```{r}
+records_vari <- factanal(records[,c(2,3,4,5,6,7,8,9)], factors = 2, method ="mle",
+                    rotation="varimax", scores="regression")
+records_vari$scores
+```
+
+
+Factor 1: 
+Weakest: [29] -1.60769230 and [4] -1.00349359
+
+Factor 2:
+Strong: [11] 2.37810572 and [41] 1.84174593
+Weak: [54] -2.48893709 and [5] -1.21519384
+
+
+Question 4
+
+```{r}
+chem <- read.csv('Chemical Composition of Ceramic.csv')
+```
+
+```{r}
+library("factoextra")
+library("cluster")
+```
+
+a).
+
+```{r}
+new_chem <- chem[,-c(1,2)]
+```
+
+
+```{r}
+result_dist <- dist(new_chem, method = "euclidean")
+hc_ward <- hclust(result_dist, method = "ward.D2")
+WardClusters <- cutree(hc_ward, k = 3)
+```
+
+
+I would say 3 clusters
+
+```{r}
+fviz_dend(hc_ward, cex = 0.5)
+```
+
+
+```{r}
+plot(hc_ward, cex = 0.5)
+```
+
+
+
+```{r}
+cluster_membership <- data.frame(WardClusters, row.names = chem$Ceramic.Name)
+cluster_membership
+```
+
+
+```{r}
+table(WardClusters, chem$Ceramic.Name)
+```
+
+
+
+b).
+
+```{r}
+mds_chem <- cmdscale(result_dist)
+
+head(mds_chem)
+```
+
+
+```{r}
+mds_df <- data.frame(MDS1 = mds_chem[, 1], MDS2 = mds_chem[, 2], Cluster = as.factor(WardClusters))
+```
+
+
+```{r}
+plot(mds_chem[,1], mds_chem[,2], type = "n") 
+text(mds_chem[,1], mds_chem[,2], 
+    labels = row.names(chem)) 
+```
+
+
+
+```{r}
+plot(mds_chem[,1], mds_chem[,2], 
+    type = "n", xlab = "MDS Dimension 1", 
+    ylab = "MDS Dimension 2") 
+points(mds_chem[,1], mds_chem[,2], 
+    pch = 21) 
+text(mds_chem[,1], mds_chem[,2], 
+    labels = substr(chem$Ceramic.Name, 1, 2), 
+    pos = 3, cex = 0.8) 
+```
+
+
+
+
+```{r}
+library(ggplot2)
+ggplot(mds_df, aes(x = MDS1, y = MDS2, color = Cluster)) +
+  geom_point(size = 3) +
+  labs(title = "MDS Plot (Ward's Linkage)", x = "Dimension 1", y = "Dimension 2") +
+  theme_minimal()
+```
+
+
+
+```{r}
+chem_pca <- prcomp(new_chem, center = T, scale. = T)
+
+library(ggplot2)
+ggplot(data.frame(chem_pca$x, cls = as.factor(WardClusters)), aes(PC1, PC2, color = cls)) +
+  geom_point() +
+  theme(aspect.ratio = 1)
+```
+
+
+c).
+
+
+```{r}
+hc_single <- hclust(result_dist, method = "single")
+clusters_single <- cutree(hc_single, k = 3)
+
+# Centroid linkage
+hc_centroid <- hclust(result_dist, method = "centroid")
+clusters_centroid <- cutree(hc_centroid, k = 3)
+
+#choose the smaller one
+```
+
+
+
+Single
+```{r}
+table(clusters_single, chem$Ceramic.Name)
+
+```
+
+
+Centroid
+```{r}
+table(clusters_centroid, chem$Ceramic.Name)
+```
+
+
+```{r}
+fviz_dend(hc_single, cex = 0.5)
+fviz_dend(hc_centroid, cex = 0.5)
+```
+
+
+
+```{r}
+#hc_single <- hclust(result_dist, method = "single")
+#clusters_single <- cutree(hc_single, k = 3)
+
+# Centroid linkage
+#hc_centroid <- hclust(result_dist, method = "centroid")
+#clusters_centroid <- cutree(hc_centroid, k = 3)
+
+par(mfrow = c(1, 2))
+plot(hc_single, main = "Dendrogram - Single Linkage")
+plot(hc_centroid, main = "Dendrogram - Centroid Linkage")
+
+
+```
+
+
+I would say the Centeroid is much better, we can look at the dendrogram.
+
+d).
+
+```{r}
+fviz_nbclust(new_chem, kmeans, method = "wss")
+```
+
+
+```{r}
+fviz_nbclust(new_chem, kmeans, method = "silhouette")
+```
+
+
+Let's Say K=2 because of the elbow method and the sillhouette width, we can also try K=3, and the results are below
+
+```{r}
+set.seed(1) # For reproducibility
+kmeans_result <- kmeans(new_chem, centers = 2, nstart = 25)
+kmeans_result
+```
+
+
+```{r}
+table(kmeans_result$cluster, chem$Ceramic.Name)
+```
+
+
+
+e).
+
+```{r}
+fviz_cluster(kmeans_result, data = new_chem)
+```
+
+
+```{r}
+chem_scale <- cmdscale(result_dist)
+head(chem_scale)
+```
+
+
+
+```{r}
+chem_df <- data.frame(MDS1 = chem_scale[, 1], MDS2 = chem_scale[, 2], Cluster = as.factor(kmeans_result$cluster))
+```
+
+
+
+
+```{r}
+library(ggplot2)
+ggplot(chem_df, aes(x = MDS1, y = MDS2, color = Cluster)) +
+  geom_point(size = 3) +
+  labs(title = "MDS Plot (K-Means Clustering)", x = "Dimension 1", y = "Dimension 2") +
+  theme_minimal()
+```
+
+
+
+
+Let's try with K=3
+
+```{r}
+set.seed(1) # For reproducibility
+kmeans_res <- kmeans(new_chem, centers = 3, nstart = 25)
+kmeans_res
+```
+
+
+```{r}
+table(kmeans_res$cluster, chem$Ceramic.Name)
+```
+
+
+```{r}
+fviz_cluster(kmeans_res, data = new_chem)
+```
+
+
+```{r}
+chem_dframe <- data.frame(MDS1 = chem_scale[, 1], MDS2 = chem_scale[, 2], Cluster = as.factor(kmeans_res$cluster))
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(chem_dframe, aes(x = MDS1, y = MDS2, color = Cluster)) +
+  geom_point(size = 3) +
+  labs(title = "MDS Plot (K-Means Clustering)", x = "Dimension 1", y = "Dimension 2") +
+  theme_minimal()
+```
+
