@@ -1,0 +1,193 @@
+---
+title: "Logistic Regression"
+author: "Pulong Ma"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_knit$set(root.dir="~/Documents/Teaching/STAT475_575/Fall2024/Data")
+
+#setwd("~/Documents/Teaching/STAT475_575/Fall2024/Data")
+library(ggplot2)
+
+```
+
+# Why logistic regression?
+
+- To deal with variables that are not continuous (e.g., nominal, categorical) since linear or quadratic discriminant analysis could not be used. 
+
+- To deal with non-normal variables. 
+
+
+# Crime data
+
+```{r}
+ #  This R code performs logistic regression on alcoholic
+ #  rehabilitation data posted as crimeR.dat. 
+ 
+ #  Enter the data and assign variable names
+ 
+ crim<-read.table("crimeR.dat",
+      header=F, col.names=c("ID","result","age","sex","educ","emotion",
+      "etreat", "living","atreat","alcadd","health","finance","marriage",
+       "pdrink","sibs","work","wages","jobs","dage","dfreq","stop",
+       "dry","drugs"))
+
+ head(crim)
+
+
+```
+
+
+```{r}
+# Create binary variables from categorical variables.  This was done instead of
+# using factors so individual levels could be selected in a model search.
+
+   nn<-dim(crim)[1]
+   crim$e1<-rep(0,nn)
+   crim$e1[crim$educ==1]<-1
+   crim$e2<-rep(0,nn)
+   crim$e2[crim$educ==2]<-1
+   crim$e3<-rep(0,nn)
+   crim$e3[crim$educ==3]<-1 
+   crim$m1<-rep(0,nn)
+   crim$m1[crim$marriage==1]<-1 
+   crim$m2<-rep(0,nn)
+   crim$m2[crim$marriage==2]<-1
+   crim$m3<-rep(0,nn)
+   crim$m3[crim$marriage==3]<-1
+   crim$L1<-rep(0,nn)
+   crim$L1[crim$living==1]<-1
+   crim$L2<-rep(0,nn)
+   crim$L2[crim$living==2]<-1
+   crim$L3<-rep(0,nn)
+   crim$L3[crim$living==3]<-1
+   crim$L4<-rep(0,nn)
+   crim$L4[crim$living==4]<-1
+
+```
+
+
+```{r}
+# Transform the binary response to take values 0  for success and 1 for failure  
+  crim$result <- crim$result - 1
+  head(crim)
+
+#  Fit a big logistic regression model.  Cases with incomplete
+#  information will not be used.
+   
+    crim1<-glm(result ~ age+sex+e1+e2+e3+emotion+etreat+L1+L2+L3+L4+
+                   atreat+alcadd+health+finance+m1+m2+m3+pdrink+
+                   sibs+work+wages+jobs+dage+dfreq+stop+dry+drugs,
+                   family=binomial, data=crim)
+
+   crim1$coef
+  
+
+```
+
+
+```{r}
+#  Select rows of data frame with no missing data.  This must be done 
+#  to avoid errors in using the stepwise search algorithms.
+
+  crimc <- na.omit(crim)
+ 
+#  Some coefficients are infinite.  The algorithm did
+#  not converge to a finite solution.  Fit a smaller model.
+ 
+   crim1<-glm(result ~ age+sex+emotion+etreat+L1+L2+L3+L4+
+                     atreat+alcadd+health+finance+m1+m2+m3+pdrink+
+                     sibs+work+wages+jobs+dage+dfreq+stop+dry+drugs,
+                     family=binomial, data=crimc)
+ 
+#  Print the estimated coefficients
+ 
+    crim1$coef
+
+```
+
+
+```{r}
+#  Use a backward selection algorithm to select a good model and
+#  print the coefficients for the final model
+  
+   crim2<-step(crim1, direction=c("backward"))
+
+```
+
+```{r}
+#  Use a stepwise selection algorithm to select a good model and
+#  print the coefficients for the final model
+ 
+   crim3<-glm(result ~ age, family=binomial, data=crimc)
+ 
+   crim4<-step(crim3, direction=c("both"), 
+             scope=list(upper= ~age+sex+emotion+etreat+L1+L2+L3+L4+
+                    atreat+alcadd+health+finance+m1+m2+m3+pdrink+sibs+
+                    work+wages+jobs+dage+dfreq+stop+dry+drugs, 
+                    lower = ~1),trace=F)
+
+  crim4$coef
+
+```
+
+```{r}
+
+#  Create a new data frame using only the variables or
+#  factors you want to include in the logistic regression 
+#  model.
+
+   x<-subset(crim, select=c("age","etreat","L2","atreat",
+                   "health","pdrink","wages","dfreq","result"))
+   crimc2 <- na.omit(x)
+   nnm <- nrow(crimc2)
+ 
+   crim6<-glm(result ~ age+etreat+L2+health+pdrink+
+                   atreat+wages+dfreq,family=binomial, data=crimc2)
+   crim6p<-predict(crim6)
+   crim6class <- rep(0,nnm)
+   crim6class[ crim6p>0 ]<-1
+   table(crimc2$result, crim6class)
+
+```
+
+
+```{r}
+#  Create a new data frame using only the variables or
+#  factors you want to include in the second logistic 
+#  regression model from the stepwise search.
+
+   x2<-subset(crim, select=c("age","etreat","sibs","wages",
+                 "atreat","m1","L2","sex","result"))
+   crimc2 <- na.omit(x2)
+   nnm <- nrow(crimc2)
+     crim7<-glm(result ~ age+etreat+sibs+wages+atreat+
+                    m1+L2+sex,  family=binomial, data=crimc2)
+      crim7p<-predict(crim7)
+   crim7class <- rep(0,nnm)
+   crim7class[ crim7p>0 ]<-1
+   table(crimc2$result, crim7class)
+
+ cv.fit = boot::cv.glm(data=crimc2, glmfit=crim7, K=nnm)
+ # cross-validation error
+ cv.fit$delta
+ 
+ # Evaluate the model that used all of the variables
+# More cases deleted because of more missing values. 
+
+   crim1<-glm(result ~ age+sex+emotion+etreat+L1+L2+L3+L4+
+                     atreat+alcadd+health+finance+m1+m2+m3+pdrink+
+                     sibs+work+wages+jobs+dage+dfreq+stop+dry+drugs,
+                     family=binomial, data=crimc)
+ nnm <- nrow(crimc)
+   crim1p<-predict(crim1)
+   crim1class <- rep(0,nnm)
+   crim1class[ crim1p>0 ]<-1
+   table(crimc$result, crim1class)
+  
+
+```

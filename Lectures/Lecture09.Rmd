@@ -1,0 +1,156 @@
+---
+title: "Clustering Analysis"
+author: "Pulong Ma"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(root.dir="~/Documents/Teaching/STAT475-575/Fall2024/Data/")
+
+library(ggplot2)
+
+```
+
+
+
+# Agglomerative hierarchical clustering
+ 
+
+We’ll follow the steps below to perform agglomerative hierarchical clustering using R software:
+
+- Preparing the data
+- Computing (dis)similarity information between every pair of objects in the data set.
+- Using linkage function to group objects into hierarchical cluster tree, based on the distance information generated at step 1. Objects/clusters that are in close proximity are linked together using the linkage function.
+- Determining where to cut the hierarchical tree into clusters. This creates a partition of the data.
+
+
+```{r}
+# Load the data
+data("USArrests")
+
+# Standardize the data
+df <- scale(USArrests)
+
+# Show the first 6 rows
+head(df, nrow = 6)
+
+# Compute the dissimilarity matrix
+# df = the standardized data
+res.dist <- dist(df, method = "euclidean")
+
+# Linkage
+res.hc <- hclust(d = res.dist, method = "single")
+res.hc <- hclust(d = res.dist, method = "average")
+res.hc <- hclust(d = res.dist, method = "complete")
+res.hc <- hclust(d = res.dist, method = "ward.D2")
+
+
+# Tree (or Dendrogram)
+
+library("factoextra")
+fviz_dend(res.hc, cex = 0.5)
+
+# Cut tree into 4 groups
+grp <- cutree(res.hc, k = 4)
+head(grp, n = 4)
+
+# Number of members in each cluster
+table(grp)
+
+# Get the names for the members of cluster 1
+rownames(df)[grp == 1]
+
+```
+
+
+```{r}
+library(ComplexHeatmap)
+Heatmap(USArrests, show_row_names=FALSE)
+```
+
+
+# K-means clustering
+
+- Choose the number of cluster $K$
+- Randomly assign each observation to an initial cluster, from 1 to $K$.
+- Perform the following procedure until the cluster assignments stop changing
+  - For each of the K clusters, compute the cluster centroid. This is simply the vector of the p feature means for the observations in the kth cluster.
+  - Assign each observation to the cluster whose centroid is closest. 
+  
+  
+```{r}
+library(factoextra)
+library(cluster)
+#load data
+df <- USArrests
+
+#remove rows with missing values
+df <- na.omit(df)
+
+#scale each variable to have a mean of 0 and sd of 1
+df <- scale(df)
+
+#view first six rows of dataset
+head(df)
+
+fviz_nbclust(df, kmeans, method = "wss")
+
+#make this example reproducible
+set.seed(1)
+
+#perform k-means clustering with k = 4 clusters
+km <- kmeans(df, centers = 4, nstart = 25)
+
+#view results
+km
+
+#plot results of final k-means model
+fviz_cluster(km, data = df)
+
+#find means of each cluster
+aggregate(USArrests, by=list(cluster=km$cluster), mean)
+
+#add cluster assigment to original data
+final_data <- cbind(USArrests, cluster = km$cluster)
+
+#view final data
+head(final_data)
+
+```
+
+Different methods to select the number of clusters
+```{r}
+
+# total within sum of squares, looking for the "elbow"
+fviz_nbclust(df, 
+             kmeans, 
+             nstart=2,
+             iter.max=200,
+             method="wss"
+             )
+
+# silhouette method
+fviz_nbclust(df, 
+             kmeans,
+             method = "silhouette") 
+
+# gap statistic method
+fviz_nbclust(df, 
+             kmeans ,
+             nstart = 2, 
+             method = "gap_stat")
+
+```
+
+
+K-means clustering offers the following benefits:
+- It is a fast algorithm
+- It can handle large datasets well
+
+Drawbacks of K-means clustering:
+- It requires us to specify the number of clusters before performing the algorithm.
+- It’s sensitive to outliers.
+
