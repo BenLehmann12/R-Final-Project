@@ -1,0 +1,235 @@
+---
+title: "HW3BenLehmann"
+author: "Ben Lehmann"
+date: "2024-10-09"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(ggplot2)
+library(GGally)
+library(DescTools)
+library(mvShapiroTest)
+library(biotools)
+```
+
+
+
+```{r}
+rabbits <- read.csv('rabbits2.csv')
+new_rabbits <- rabbits
+new_rabbits$insulin <- as.factor(new_rabbits$insulin)
+```
+
+```{r}
+library(reshape2)
+library(ggplot2)
+means_col <- colMeans(new_rabbits[, 3:7])
+col_name <- colnames(new_rabbits[, 3:7])
+rabbits_data_new <- (new_rabbits[, 3:7] - means_col)/ means_col*100
+rabbits_data_new$insulin = new_rabbits$insulin
+rabbits_data_new <- melt(rabbits_data_new, measure.vars = col_name, id.vars = "insulin")
+ggplot(rabbits_data_new, aes(x= variable, y = value , color = insulin))+geom_boxplot()+facet_wrap(~variable, scale="free")
+```
+
+The Mean differences in the Blood Sugar percentage change is small between the 1st and 2nd manufacturers in the 1st and 4th hour, we do see a difference in the 2nd hour and 5th hour.
+
+b).
+
+Hotelling's Test
+
+```{r}
+library(DescTools)
+rabbit1 <- rabbits[rabbits$insulin == 1, 3:7]
+rabbit2 <- rabbits[rabbits$insulin == 2, 3:7]
+n1 <- nrow(rabbit1)
+n2 <- nrow(rabbit2)
+p <- ncol(rabbit1)
+t2test <- HotellingsT2Test(rabbit1, rabbit2)
+t2test
+```
+
+```{r}
+t2test$statistic * p * (n1 + n2 - 2) / (n1 + n2 - p - 1) # Calculate T2 statistic
+```
+
+T-squared statistic is 2.164812, the corresponding F-value is 0.39966 with (5, 48) df. 
+
+Because the p-value of 0.8466 is large (>0.05), the data do not provide sufficient evidence to reject the null hypothesis. It appears that mean percent changes in blood sugar levels are about the same for the two insulins during the first five
+hours after the insulin is administered.
+
+
+c).
+
+```{r}
+library(biotools)
+boxM(rabbits[, 3:7], rabbits$insulin)  #Before Bon CI, check the p value to whether to use Pooled or Not
+```
+
+
+**Attempt 1**
+
+```{r}
+xbar1<-sapply(rabbits[rabbits$insulin==1, 3:7], mean)
+xvar1<-var(rabbits[rabbits$insulin==1 , 3:7])
+xcor1 <-cor(rabbits[rabbits$insulin==1 ,3:7])
+xbar2<-sapply(rabbits[rabbits$insulin==2, 3:7], mean)
+xvar2<-var(rabbits[rabbits$insulin==2 , 3:7])
+xcor2 <-cor(rabbits[rabbits$insulin==2 , 3:7])
+
+
+n1 <- dim(rabbits[rabbits$insulin==1, -1])[1]
+n2 <- dim(rabbits[rabbits$insulin==2, -1])[1]
+p <- dim(rabbits[rabbits$insulin==2, 3:7])[2]
+
+level <- 0.95
+df1 <- p
+df2 <- n1+n2-p-1
+df3 <- n1+n2-2
+
+levelb <- 1-(1-level)/(2*p)
+c_bon <- qt(levelb, df3)
+vpool <- ((n1-1)*xvar1 +(n2-1)*xvar2)/(n1+n2-2)
+lower_limit <- (xbar1-xbar2) - c_bon*sqrt(diag(vpool)*((1/n1)+(1/n2)))
+upper_limit <- (xbar1-xbar2) + c_bon*sqrt(diag(vpool)*((1/n1)+(1/n2)))
+rbind(lower_limit, upper_limit)
+```
+
+
+We can also do it this way (Less Code)
+
+```{r}
+#Bonferoni (pooled)
+level <- 0.95
+levelb <- 1 - (1 - level) / (2 * p)
+c_bon <- qt(levelb, df = n1 + n2 - 2)
+vpool <- ((n1 - 1) * var(rabbit1) + (n2 - 1) * var(rabbit2)) / (n1 + n2 - 2)
+lower <- colMeans(rabbit1) - colMeans(rabbit2) - c_bon * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+upper <- colMeans(rabbit1) - colMeans(rabbit2) + c_bon * sqrt(diag(vpool) * (1 / n1 + 1 / n2))
+rbind(lower, upper)
+```
+
+The p-value of box M test is 0.09674 > 0.05, so we can use pooled sample covariance matrix.
+Because all of the confidence intervals contain zero, these confidence intervals do not demonstrate a significant
+difference in the mean percentage change in blood sugar at any of the five inspection times.
+
+
+
+d).
+
+```{r}
+library(mvShapiroTest) 
+mvShapiro.Test(as.matrix(rabbits[rabbits$insulin == 1, 3:7]))
+```
+
+For Insulin == 1, The p-value less than 0.05 which indicates that we
+reject the null hypothesis, the data does not follow multivariate
+normal distribution
+
+```{r}
+mvShapiro.Test(as.matrix(rabbits[rabbits$insulin == 2, 3:7]))
+```
+
+For Insulin == 2, The p-value less than 0.05 indicates that we rejected
+the null hypothesis, hence data does not follow multivariate normal
+distribution
+
+Because the p-value (0.005768, 0.01136) are smaller than 0.05, both groups don’t follow multivariate normal
+distribution.
+
+```{r}
+apply(rabbits[rabbits$insulin == 1, 3:7], 2, shapiro.test)
+
+
+```
+
+For Insulin == 1, We see that X3 has a p-value lower than 0.05, so we
+reject the null hypothesis and this variable is not normally
+distributed. Other variables have p-value over 0.05, so we fail to
+rejected the null hypothesis and these variables are multivariate
+normally distributed.
+
+```{r}
+apply(rabbits[rabbits$insulin == 2, 3:7], 2, shapiro.test)
+```
+
+Here, variable x4 and x5 have p-value lower than 0.05, so the
+null hypothesis is rejected in these two cases and that they are not normally distributed. Also, the sample size is
+small. So, the assumptions were not right even though X1, X2 and X3 are normally distributed.
+
+
+Question 2
+
+a).
+
+```{r}
+library(car)
+crude <- read.csv('crudeoil.csv')
+crude$Zone <- as.factor(crude$Zone)
+```
+
+```{r}
+model <- lm(cbind(X1,X2,X3,X4,X5)~Zone, data=crude)
+summary(Manova(model))
+```
+
+
+DF = 2 T-stat = 0.116 F = 18.96 DF = 10 P-val \< 2.22e-16
+
+Because our p-value is less than 0.05, we have have strong evidence to reject our null hypothesis, therefore the populations do not have the same mean vectors.
+
+Using a one-way MANOVA to test the null hypothesis of no differences among the three sandstone zones
+with respect to the mean vectors for the levels of the five trace elements produced a Wilks lambda value of
+0.116048, and this is converted to an F-value of 18.96779 with (10, 98) degrees of freedom. The p-value is
+extremely small (<0.05), and the null hypothesis of equal mean vectors for the three strata can be rejected
+
+b).
+
+
+```{r}
+boxM(crude[, -1], crude$Zone)
+```
+
+
+
+```{r}
+crudeoil1 <- crude[crude$Zone == 1, -1]
+crudeoil2 <- crude[crude$Zone == 2, -1]
+crudeoil3 <- crude[crude$Zone == 3, -1]
+n1 <- nrow(crudeoil1)
+n2 <- nrow(crudeoil2)
+n3 <- nrow(crudeoil3)
+p <- ncol(crudeoil1)
+g <- nlevels(crude$Zone)
+level <- 0.95
+m <- p * g * (g - 1) / 2
+levelb <- 1 - (1 - level) / (2 * m)
+c_bon <- qt(levelb, df = n1 + n2 + n3 - g)
+mean1 <- colMeans(crudeoil1)
+mean2 <- colMeans(crudeoil2)
+mean3 <- colMeans(crudeoil3)
+var1 <- var(crudeoil1)
+var2 <- var(crudeoil2)
+var3 <- var(crudeoil3)
+lower_1v2 <- mean1 - mean2 - c_bon * sqrt(diag(var1 / n1 + var2 / n2))
+upper_1v2 <- mean1 - mean2 + c_bon * sqrt(diag(var1 / n1 + var2 / n2))
+lower_1v3 <- mean1 - mean3 - c_bon * sqrt(diag(var1 / n1 + var3 / n3))
+upper_1v3 <- mean1 - mean3 + c_bon * sqrt(diag(var1 / n1 + var3 / n3))
+lower_2v3 <- mean2 - mean3 - c_bon * sqrt(diag(var2 / n2 + var3 / n3))
+upper_2v3 <- mean2 - mean3 + c_bon * sqrt(diag(var2 / n2 + var3 / n3))
+rbind(lower_1v2, upper_1v2, lower_1v3, upper_1v3, lower_2v3, upper_2v3)
+```
+
+The p-value of box M test is 0.01542 < 0.05, so we have to use individual sample covariance matrices
+
+Between Zone 1 and Zone 2, X5 is the only one that does not include 0, which means it is significant in Zone 1 rather than Zone 2, the other Means are not significant because they include 0.
+Between Zone 1 and Zone 3, with X1, zone 3 is larger than zone 1. Also X4 and X5, Zone 1 is larger. X2 and X3, the differences are not that significant.
+Between Zone 2 and Zone 3, With X1, Zone 3 is larger and with X2, Zone 2 is larger. The other differences in variables are not significant.
