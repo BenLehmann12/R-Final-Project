@@ -1,0 +1,283 @@
+---
+title: "HW1Stat475"
+author: "Ben Lehmann"
+date: "2024-09-12"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Question 1
+```{r}
+X <- matrix(c(2, 5, 1, 3, 0, 6, 
+              -1, 1, 0, -3, 2, -3, 
+              6, 9, 5, 7, 8, 5, 
+              -2, 2, 0, -4, -1, -5, 
+              5, 8, 4, 1, 9, 6, 
+              1, 5, -2, 0, 7, 3, 
+              6, 8, 3, 1, 6, 5), 
+              nrow = 7, ncol = 6, byrow = TRUE)
+```
+
+
+a). N = 7, P = 6
+
+b). X(32) = 9
+
+c).
+```{r}
+colMeans(X)
+```
+
+
+d).
+
+```{r}
+S <- cov(X)
+S
+```
+
+
+
+e).
+```{r}
+R <- cor(X)
+R
+```
+
+f). 
+```{r}
+new_X <- t(X)
+new_X
+```
+
+g).
+I originally did the Z-score formula with apply(), but in R, we can use scale() to standardize the data. Got the same thing
+```{r}
+z <- apply(X,2,scale)
+z
+```
+
+
+
+```{r}
+Z <- scale(X)
+Z
+```
+
+
+
+
+h).
+
+Correlation of X
+```{r}
+cor(X)
+```
+
+Covarriance of Scaled Matrix Z
+```{r}
+cov(z)
+```
+
+Correlation of Scaled Matrix Z
+```{r}
+cor(z)
+```
+
+When we standardize the Matrix Z, the Covariance matrix of Z is equal to the Correlation matrix of X.
+
+The covariance matrix shows the relationship between two variables, a positive covariance means increase in one variable will lead to increase in other one. Correlation matrix is a step ahead because it can quantify the change in relation
+
+Question 2
+
+```{r}
+liver <- read.csv('liver_enzymes.csv')
+```
+
+
+2a
+```{r}
+sapply(liver[, 2:4], mean)
+```
+
+2b
+```{r}
+cov(liver[, 2:4])
+```
+
+2c
+```{r}
+cor(liver[, 2:4])
+```
+X2 and X3 have the strongest correlation also X1 and X3
+
+2d
+```{r}
+pairs(liver[, 2:4], main = "Scatterplot Matrix")
+```
+It seems to be linear, but the based on the data points, it is tough to conclude as well. We can see a linear relationship between X2 and X3. There could be a relation in (X1 and X2) as well as (X2 and X3).
+
+2e
+
+```{r}
+det(cov(liver[, 2:4]))
+```
+|S| is a reasonable measure of overall variation in the values of three variables because it represents the average distance each data point in a set is away from the mean. Basically how dispered the data is.
+
+
+2f
+
+```{r}
+sum(diag(cov(liver[, 2:4])))
+```
+Trace(S) takes into account the variability of a Covariance Matrix, |S| takes the correlation matrix into account
+
+Question 4
+
+```{r}
+food <- read.csv('cereal.csv')
+```
+
+
+a).
+
+```{r}
+manufacturer_counts <- table(food$manufacturer)
+manufacturer_counts
+```
+
+b). 68 Values does not have -1
+9 Values did have -1
+
+Proportion(Not -1): 68/77 = .883
+Proportion(has -1): 9/77 = 0.117
+
+```{r}
+food_clean <- subset(food, cups != -1.00)
+```
+
+
+c).
+
+```{r}
+scaled_food <- food_clean
+
+scaled_food[,c(4,5,6,7,8,9,10,12,13)] <- scaled_food[,c(4,5,6,7,8,9,10,12,13)]/ scaled_food$cups
+
+head(scaled_food)
+```
+
+
+
+```{r}
+highest_calories <- scaled_food$name[which.max(scaled_food$calories)]
+
+# Cereal with the lowest calories per cup
+lowest_calories <- scaled_food$name[which.min(scaled_food$calories)]
+
+highest_calories
+lowest_calories
+```
+
+
+
+
+```{r}
+highest_vitamins <- scaled_food$name[which.max(scaled_food$vitamins)]
+
+# Cereal with the lowest vitamins per cup
+lowest_vitamins <- scaled_food$name[which.min(scaled_food$vitamins)]
+
+highest_vitamins
+lowest_vitamins
+```
+
+
+
+i). Grape-Nuts has the highest Calories per Cups, Puffed_Rice has the lowest
+
+ii). Just_Right_Fruit_Nut has the highest vitamins, Cream_of_Wheat_Quick has the lowest Vitamins
+
+iii).
+Scaled Data Matrix
+```{r}
+library(GGally)
+
+# Create scatterplot matrix for selected variables
+scatter_matrix <- ggpairs(scaled_food[,c(4, 9, 6, 8, 7,12)])
+scatter_matrix
+```
+
+From the ﬁgure, the relation is positive in all cases. The relation is mostly linear in between variables except (fat, ﬁber), (carbs,fat). Also the linear relationship is weak in between (fat, sodium) and (fat, potassium) and (fiber, fat).
+We see (Fiber, Potassium), (Calories, Carbs) have a nearly linear association.
+
+
+
+
+iv).
+```{r}
+library(ggplot2)
+
+ggplot(scaled_food, aes(factor(shelf), sugar)) +
+  geom_boxplot() +
+  labs(title = "Sugar Content by Shelf Position", x = "Shelf Position", y = "Sugar Content per Cup")
+```
+
+Sugar content is lower in low shelf. In the middle shelf, median sugar content is similar to high, but the range of sugar content is much smaller. More than half of the boxes have sugar content in between 12 to 14 and a quarter of the boxes have sugar content in between 11-12. In the top shelf, sugar content is high.
+
+
+v).
+
+```{r}
+library(ggplot2)
+
+ggplot(scaled_food, aes(factor(shelf), fiber)) +
+  geom_boxplot() +
+  labs(title = "Fiber Content by Shelf Position", x = "Shelf Position", y = "Fiber Content per Cup")
+```
+With top and the middle shelf, we can see that there are some cereal with high fiber. Fiber is low in the middle shelf compared to the Top and low shelves. The top shelf has the highest fiber content.
+
+
+vi).
+
+```{r}
+library(GGally)
+scaled_food[, "shelf"]<- as.factor(scaled_food[, "shelf"])
+ggparcoord(scaled_food,columns=c(4,5,6,7,8,9,10,12,13), groupColumn = "shelf",title = "Parallel Coordinate Plot of Cereal Data")
+```
+The Nutritional values are higher in the top shelves, while in the bottom shelf, the nutritional values are lower.
+
+vii).
+
+```{r}
+
+library(ggplot2)
+k_g_cereals <- subset(scaled_food, manufacturer %in% c("K", "G"))
+
+# Create a scatter plot comparing some variables, color-coded by manufacturer
+ggplot(k_g_cereals, aes(x = calories, y = sugar, color = manufacturer)) +
+  geom_point() +
+  labs(title = "Calories vs Sugar: Kelloggs vs General Mills", x = "Calories per Cup", y = "Sugar per Cup")
+```
+
+Regular Data
+
+```{r}
+library(GGally)
+manu_cereal <- subset(food, food$manufacturer=='K'|food$manufacturer=='G')
+ggparcoord(manu_cereal, c(4,6,7,9,10,13,5,12,8), groupColumn = 'manufacturer')
+```
+
+
+Scaled Data
+```{r}
+scaled_cereal <- subset(scaled_food, scaled_food$manufacturer=='K'|scaled_food$manufacturer=='G')
+ggparcoord(scaled_cereal, c(4,6,7,9,10,13,5,12,8), groupColumn = 'manufacturer')
+```
+
+
+We can see that Kellog have more variance in all nutritional types especially in Calories, General Mills cereals have lower Variation in nutritional types.
