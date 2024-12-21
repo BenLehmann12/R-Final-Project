@@ -1,0 +1,294 @@
+---
+title: "HW2BenLehmann"
+author: "Ben Lehmann"
+date: "2024-09-26"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Question 1
+
+```{r}
+cork <- read.csv('cork.csv')
+```
+
+
+a). 
+```{r}
+sapply(cork[,2:5], mean)
+```
+
+b).
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+boxplot(cork[,2:5])
+
+
+library(reshape2)
+ggplot(melt(cork, id.vars = "tree"), aes(x = variable, y = value)) +
+  geom_boxplot()
+
+```
+
+Looking at the Medians, they are near the same, we look at the ranges and they tend to be near each other as well.
+
+c).
+
+```{r}
+cor(cork[,2:5])
+```
+
+```{r}
+library(GGally)
+ggpairs(cork[, -1])
+```
+
+
+d).
+
+```{r}
+ggplot(melt(cork, id.vars = "tree"), aes(sample = value)) +
+  geom_qq() +
+  geom_qq_line() +
+  facet_wrap(~ variable, scales = "free", nrow = 2)
+```
+
+Univariate Shapiro Test
+```{r}
+apply(cork[, 2:5], 2, shapiro.test)
+
+```
+North: p = 0.0179
+
+Conclusion: Since the p-value is less than 0.05, we reject the null hypothesis of normality. Therefore, the data for X1_North is not normally distributed.
+
+East: p = 0.01351
+
+Conclusion: Since the p-value is less than 0.05, we reject the null hypothesis of normality. Therefore, the data for X2_East is not normally distributed.
+
+South: p = 0.007
+
+Conclusion: Since the p-value is less than 0.05, we reject the null hypothesis of normality. Therefore, the data for X3_South is not normally distributed.
+
+West: p = 0.1185
+
+Conclusion: Since the p-value is greater than 0.05, we fail to reject the null hypothesis. The data for X4_West is normally distributed
+
+Multivariate Shapiro Test
+
+```{r}
+# Multivariate Shapiro-Wilk test
+library(mvShapiroTest)
+mvShapiro.Test(as.matrix(cork[, 2:5]))
+```
+
+Since the p-value is less than  0.05 significance level, we have moderate evidence to reject the null hypothesis, indicating that the data likely does not follow a multivariate normal distribution.
+
+The Shapiro-Wilk tests reject normality of the cork thickness distributions for the north, east, and south
+sides of the trees at the 0.05 level of significance, and the corresponding probability plots show that the
+thickness distributions are skewed to the right. The Shapiro-Wilk test for multivariate normality also rejects
+the multivariate normal model for the joint distribution of cork thicknesses on the four sides of the trees
+(p-value = 0.03314). The test for multivariate normality is significant at the .05 level but not at the 0.01 level.
+The distributions of thicknesses of corks deposits exhibit right skewness on all four sides of the trees, but it is
+not severe skewness. The Q-Q plots do not deviate dramatically from straight line patterns.
+
+e).
+
+```{r}
+library(DescTools)
+t2test <- HotellingsT2Test(cork[, 2:5], mu = c(47,47,47,47))
+t2test
+n <- nrow(cork[, 2:5])
+p <- ncol(cork[, 2:5])
+t2test$statistic * p * (n - 1) / (n - p)
+```
+
+Null: The population means for the thickness of cork on all four sides (north, east, south, and west) are equal to 47
+Alternative: The population means for the thickness of cork on all four sides (north, east, south, and west) are not equal to 47
+
+DF1 = 4
+Df2 = 24
+P-value = 0.001197
+F = 6.3892
+T^2 = 28.7516
+
+
+The value of the T-squared statistic for testing the null hypothesis that the means are 47 on all four sides of
+the trees is 28.7516. The corresponding F-value is 6.3892 with (4, 24) df. Because a p-value of 0.001197 is
+quite small (<0.05), the mean thicknesses of core deposits are not 47 on all four sides of the trees
+
+f).
+
+
+```{r}
+library(DescTools)
+cork$diff1 <- cork$X1_North - cork$X4_West
+cork$diff2 <- cork$X2_East - cork$X4_West
+cork$diff3 <- cork$X3_South - cork$X4_West
+p <- ncol(cork[, 6:8])
+n <- nrow(cork)
+t2test <- HotellingsT2Test(cork[, 6:8], mu = rep(0, 3))
+t2test
+t2test$statistic * p * (n - 1) / (n - p) # Calculate T2 statistic
+```
+
+the p value is extremely small, much less than 0.05,Therefore, we reject the null hypothesis and conclude that the population means for the cork thicknesses on the north, east, south, and west sides of the trees are not all the same.
+
+The value of the T-squared statistic for testing the null hypothesis that the means are the same on the four
+sides of the trees is 20.74202 The corresponding F-value is 6.4019 with (3, 25) df. Because a p-value of 0.00228
+is quite small (<0.05), the mean thicknesses of core deposits are not the same on all four sides of the trees.
+
+
+g).
+
+```{r}
+TB.conf.int <- function(X, level = 0.95)
+{ 
+  X <- as.matrix(X)
+  n <- nrow(X)
+  p <- ncol(X)
+  np <- p * (p - 1) / 2
+  A <- matrix(c(0), ncol = np, nrow = p)
+  nc <- 0
+  for (i in 1:(p - 1)) {
+    for (j in 1:(p - i)) {
+      A[i, nc + j] <- 1
+      A[i + j, nc + j] <- -1
+    }
+    nc <- nc + (p - i)
+  }
+  CI <- matrix(NA, 2, ncol(A))
+  rownames(CI) <- c("lower", "upper")
+  colnames(CI) <- colnames(A)
+  
+  CIB <- matrix(NA, 2, ncol(A))
+  rownames(CIB) <- c("lower", "upper")
+  colnames(CIB) <- colnames(A)
+  
+  CIT <- matrix(NA, 2, ncol(A))
+  rownames(CIT) <- c("lower", "upper")
+  colnames(CIT) <- colnames(A)
+  
+  F <- qf(level, p, n - p)
+  
+  alpha <- (1 - level) / 2 / ncol(A)
+  levelB <- 1 - alpha
+  tB <- qt(levelB, n - 1)
+  t <- qt(1 - (1 - level) / 2, n - 1)
+  
+  C <- cov(X)
+  
+  for (i in 1:ncol(A))
+  { 
+    m <- mean(X %*% A[, i])
+    v <- t(A[, i]) %*% C %*% A[, i]
+    
+    CIB[1, i] <- m - tB * sqrt(v / n)
+    CIB[2, i] <- m + tB * sqrt(v / n)
+
+  }
+  print(CIB)
+  
+}
+TB.conf.int(cork[,2:5])
+```
+Thicker Cork: (North vs East), (North vs West), (South vs West)
+
+Not much difference (North vs South), (East vs South)
+
+The TB.conf.int function is applied to the four original variables, not to differences between the variables.
+The order in which the confidence intervals are printed is: mean1-mean2, mean1-mean3, mean1-mean4,
+mean2-mean3, mean2-mean4, mean3-mean4.
+
+The Bonferroni confidence intervals do not demonstrate significant differences between mean thicknesses of
+cork deposits on the north and south sides of the trees, the east and south sides, or the east and west sides.
+Mean thickness of cork deposits is higher on the north side than either the east or west side of the trees. The
+mean thickness of the cork deposits on the south side is significantly higher than on the west side.
+
+
+Question 2
+
+```{r}
+notes <- read.csv('bnotes.csv')
+```
+
+
+a).
+
+```{r}
+library(mvShapiroTest)
+apply(notes[, 1:7], 2, shapiro.test)
+```
+
+
+```{r}
+sapply(notes[, -1], shapiro.test)[1:2, ]
+```
+
+
+
+The q-q plot show most of the data is near the line, this gives us a reason to believe that this is data is normally distributed.
+
+For two of the measurements, left width and diagonal length, the Shapiro-Wilk test rejects normality at the
+0.01 level of significance. This is largely due to one extreme bank note with a relatively short diagonal length.
+We do not want to delete this bank note from the data, however, because it is real. We need to keep it in the
+data to capture all of the variation in genuine bank notes. The other 99 bank notes seem to conform fairly
+well to a sample from a six-dimensional normal distribution. The lack of normality is also due to truncating
+the values of the measurements when they were published. We do not have the original data and cannot do
+anything about that.
+
+b).
+
+```{r}
+library(mvShapiroTest)
+mvShapiro.Test(as.matrix(notes[, 1:7]))
+```
+
+Since the our p-value is less than 0.05, you would reject the null hypothesis that the data come from a multivariate normal distribution. Therefore, this result suggests that your data were not sampled from a 6-dimensional normal model
+
+c).
+
+smaller p-value is more real,
+
+
+```{r}
+new_notes <- matrix(c(
+  214.9, 130.5, 130.2, 8.4, 11.6, 138.4,
+  215.9, 129.5, 130.6, 7.9, 12.1, 140.8,
+  215.3, 130.7, 130.6, 8.1, 11.7, 142.4,
+  214.9, 130.1, 129.8, 8.7, 10.9, 141.8,
+  215.9, 131.3, 129.2, 8.5, 11.5, 138.4
+), nrow = 5, byrow = TRUE)
+```
+
+
+
+```{r}
+
+newb <- new_notes
+bmean <- colMeans(notes[,2:7])
+bvar <- var(notes[,2:7])
+n <- nrow(notes)
+p <- length(notes)
+diff <- newb - c(1, 1, 1,1,1) %*% t(bmean)
+sdiff <- ((n + 1) / n) * bvar
+d22 <- diff %*% solve(sdiff) %*% t(diff)
+d2 <- diag(d22)
+
+```
+
+
+```{r}
+prob <- 1 - pchisq(d2, p)
+prob
+```
+I would say the 1st Note, 2nd note, 3rd note and the 5th Note are forged. The 4th one might be Genuine (p>0.05).
+
+We base Forgeries on the p-value and whether it is greater than 0.05 or not.
+
