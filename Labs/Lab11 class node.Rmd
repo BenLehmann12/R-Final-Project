@@ -1,0 +1,222 @@
+
+---
+title: "Lab 11: Heat maps and dendrograms"
+author: ""
+date: ""
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+require("knitr")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Purpose
+
+This lab uses a vaeriety of tools to construct heat maps and dendrograms so that they can be used for cluster analysis. Instructions on installing packages from Bioconductor[https://www.bioconductor.org/] will also be illustrated. 
+
+## Introduction
+
+Bioconductor provides curated resources of microbiome data.  Most microbiome data are generated either by targeted amplicon sequencing (usually of variable regions of the 16S ribosomal RNA gene) or by metagenomic shotgun sequencing (MGX). These two approaches are analyzed by different sequence analysis tools, but downstream statistical and ecological analysis can involve any of the following types of data:
+
+* taxonomic abundance at different levels of the taxonomic hierarchy
+* phylogenetic distances and the phylogenetic tree of life
+* metabolic potential of the microbiome
+* abundance of microbial genes and gene families
+
+We will use heatmaps and dendrograms to perform exploratory data analysis on the Probiotics Intervention data - peerj32. The peerj32 data set contains high-through profiling data from 389 human blood serum lipids and 130 intestinal genus-level bacteria from 44 samples (22 subjects from 2 time points; before and after probiotic/placebo intervention). The data set can be used to investigate associations between intestinal bacteria and host lipid metabolism. For details, see http://dx.doi.org/10.7717/peerj.32. It is available in the package *microbiome*. 
+
+
+```{r, warning=FALSE, message=FALSE}
+# install these packages first before loading 
+library(microbiome) # Load libraries
+library(phyloseq)
+library(dplyr)
+library(reshape2)
+library(knitr)
+
+
+data(peerj32)
+pseq <- peerj32$phyloseq    # Rename data
+
+
+# Pick data subset (DI samples from Phylum Bacteroidetes)
+pseq2 <- pseq %>%
+         subset_taxa(Phylum == "Bacteroidetes") %>%
+         subset_samples(group == "LGG")
+
+
+# Z transformed abundance data
+pseqz <- microbiome::transform(pseq2, "Z")
+```
+
+# Matrix heatmaps
+```{r, out.height="100%", out.width="80%", fig.height=10, fig.width=8}
+# Plot the abundances heatmap, round values to 2 decimals
+dfm <- melt(round(abundances(pseqz), 1))
+
+colnames(dfm) <- c("Taxa", "Sample", "value")
+
+g = heat(dfm, "Taxa", "Sample", "value") +
+  theme(text=element_text(size=10), 
+        axis.text.x = element_text(angle = 30, hjust = 1),
+        legend.key.size = unit(1.2, "cm"))
+print(g)
+
+```
+
+
+# Cross-correlating data sets
+```{r}
+# Load example data 
+otu <- peerj32$microbes 
+lipids <- peerj32$lipids 
+
+# Define data sets to cross-correlate
+x <- log10(otu) # OTU Log10 (44 samples x 130 genera)
+y <- as.matrix(lipids) # Lipids (44 samples x 389 lipids)
+
+# Cross correlate data sets
+correlations <- associate(x, y, method = "spearman", mode = "matrix", p.adj.threshold = 0.05, n.signif = 1)
+
+# Or, alternatively, the same output is also available in a handy table format
+correlation.table <- associate(x, y, method = "spearman", mode = "table", p.adj.threshold = 0.05, n.signif = 1)
+
+kable(head(correlation.table))
+```
+
+# Association heatmaps
+```{r, out.height="100%", out.width="80%", fig.height=10, fig.width=8}
+p <- heat(correlation.table, "X1", "X2", 
+          fill = "Correlation", 
+          star = "p.adj", 
+          p.adj.threshold = 0.05) 
+
+p + theme(text=element_text(size=10), 
+          axis.text.x = element_text(angle = 30, hjust = 1), 
+          legend.key.size = unit(1.3, "cm"))
+```
+
+# Heatmaps with ggplot2
+```{r, out.height="100%", out.width="80%", fig.height=10, fig.width=8}
+# Set black-and-white theme
+library(ggplot2)
+theme_set(theme_bw())
+
+
+library(dplyr)
+# Pick only the correlations with q<0.05
+# Note: this will leave other cells empty
+#subtable <- filter(correlation.table, p.adj < 0.05)
+
+subtable = correlation.table
+
+# Arrange the figure
+p <- ggplot(subtable, aes(x = X1, y = X2, fill = Correlation))
+p <- p + geom_tile() 
+p <- p + scale_fill_gradientn("", 
+                       breaks = seq(from = -1, to = 1, by = 0.2), 
+                   colours = c("darkblue", "blue", "white", "red", "darkred"), 
+                   limits = c(-1,1)) 
+
+# Polish texts
+p <- p + theme(axis.text.x=element_text(angle = 30, hjust=1, face = "italic"),
+               axis.text.y=element_text(size = 8))
+p <- p + xlab("") + ylab("")
+
+## Mark the most significant cells with stars
+#p <- p + geom_text(data = subset(correlation.table, p.adj < 0.02), 
+#               aes(x = X1, y = X2, label = "+"), col = "white", size = 5)
+
+# Plot
+print(p)
+```
+
+
+# Heatmap with text
+```{r, out.height="100%", out.width="100%", fig.height=16, fig.width=14}
+theme_set(theme_bw(20))
+df <- correlation.table
+p <- ggplot(df, aes(X1, X2, group=X2)) 
+p <- p + geom_tile(aes(fill = Correlation)) 
+p <- p + geom_text(aes(fill = Correlation, label = round(Correlation, 1)), size = 2) 
+p <- p + scale_fill_gradientn("",
+                      breaks = seq(from = -1, to = 1,  by = 0.25), 
+                      colours = c("blue", "white", "red"), 
+                  limits = c(-1, 1)) +
+        theme(axis.text.x = element_text(angle = 30, vjust = 0.5, hjust=1, face="italic")) +
+        labs(x = "", y = "")
+print(p)
+```
+
+
+# ggcorr
+An alternative way to visualize correlation matrices is provided by the ggcorr package. Note: this toy example does not consider the compositionality effect in microbial abundance correlations. See the package site for more detailed examples and many more options.
+
+```{r}
+library(GGally)
+ggcorr(x[, 1:10], method = c("pairwise", "spearman"), nbreaks = 20, hjust = 0.75)
+ggcorr(x[, 1:10], method = c("pairwise", "spearman"), nbreaks = 20, geom = "circle")
+ggcorr(x[, 1:10], method = c("pairwise", "spearman"), nbreaks = 20, label = TRUE, label_alpha = TRUE)
+ggcorr(data = NULL, cor_matrix = cor(x[, 1:10], use = "everything"), low = "steelblue", mid = "white", high = "darkred", midpoint = 0)
+```
+
+
+# Adding Dendrograms to heatmap
+```{r}
+library(gplots)
+
+```
+
+```{r, out.height="90%", out.width="90%", fig.height=8, fig.width=8}
+if(!require("RColorBrewer")) install.packages("RColorBrewer")
+# This creates a colour palette that shades from darkblue to darkred in RGB space with 100 unique colours
+mycolors <- colorRampPalette(c("blue", "white", "red"), space="rgb")(100)
+
+dat = t(pseqz@otu_table@.Data)
+
+heatmap.2(dat, key=FALSE, dendrogram="none", trace="none", col=mycolors, srtCol = 30,
+               lwid=c(0.1,1), lhei=c(0.1,1)) 
+
+```
+
+
+```{r}
+# distance matrix
+d = dist(dat)
+# hierarchical clustering
+hc = hclust(d)
+# dendrogram
+plot(hc)
+
+plot(as.dendrogram(hc))
+
+```
+
+# Different linkages
+```{r}
+# distance matrix
+d = dist(dat)
+
+# hierarchical clustering 
+hc1 = hclust(d, method="single") # single linkage
+hc2 = hclust(d, method="complete") # complete linkage
+hc3 = hclust(d, method="average") # average linkage
+
+# dendrogram
+par(mfrow=c(1,3))
+plot(as.dendrogram(hc1), main="single linkage")
+plot(as.dendrogram(hc2), main="complete linkage")
+plot(as.dendrogram(hc3), main="average linkage")
+
+
+
+```
+
+```{r, out.height="90%", out.width="90%", fig.height=8, fig.width=8}
+heatmap.2(dat, hclustfun = hclust, dendrogram="row", trace="none", col=mycolors, srtCol = 30,
+             lwid=c(0.4,1), lhei=c(0.4,1)) 
+
+
+```

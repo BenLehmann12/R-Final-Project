@@ -1,0 +1,294 @@
+---
+title: "Lab10"
+author: "Ben Lehmann, Zachary Picchietti"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# *You may help each other, but please do it QUITELY.*
+
+## Insect Community Data
+
+The data set (newpbi.csv) consist of insect counts collected on 30 Iowa prairies. The 44 types of insects are:
+
+Araneae, Acari, Coleoptera Cantharidae, Coleoptera Carabidae, Coleoptera Chrysomelidae, Coleoptera Cleridae, Coleoptera Coccinellidae, Coleoptera Curculionidae, Coleoptera Elateridae, Coleoptera Lampyridae, Coleoptera Meloidae, Coleoptera Melyridae, Coleoptera Mordellidae, Coleoptera Staphylinidae, Collembola Diptera, Hemiptera Alydidae, Hemiptera Anthocoridae, Hemiptera Aphididae, Hemiptera Cercopidae, Hemiptera Cicadellidae, Hemiptera Cixiidae, Hemiptera Coreidae, Hemiptera Delphacidae, Hemiptera Dictyopharidae, Hemiptera Issidae, Hemiptera Lygaeidae, Hemiptera Membracidae, Hemiptera Miridae, Hemiptera Nabidae, Hemiptera Pentatomidae, Hemiptera Psyllidae, Hemiptera Reduviidae, Hemiptera Thyreocoridae, Hemiptera Tingidae, Hymenoptera, Hymenoptera Formicidae, Neuroptera Chrysopidae, Orthoptera Acrididae, Orthoptera Gryllidae, Orthoptera Tettigonidae, Phasmatodea Heteronemiidae, Psocoptera, Thysanoptera.
+
+Counts of these insects were taken periodically over one summer at the 30 sites. The goal is to group the prairies with respect to similarly composed insect populations. For this analysis we will just use the counts for the Coleoptera beetles in columns 5 through 16 of the data frame. Attach some libraries of functions. The vegan package in R contains functions for creating distance (or dissimilarity) matrices using different types of distances.
+
+```{r}
+pbi <- read.csv("newpbi.csv")
+dim(pbi)
+str(pbi)
+head(pbi[, c(1, 2, 5:16)])
+```
+
+## Hierarchical Clustering
+
+Hierarchical clustering can be performed using the hclust function in R.
+
+hclust(d, method = "complete", members = NULL)
+
+- d: a dissimilarity structure as produced by dist.
+- method: the choices for the linkage algorithm are "ward.D", "ward.D2", "single", "complete", "average", "mcquitty", "median", or "centroid".
+
+This function performs a hierarchical cluster analysis using a set of dissimilarities for the n objects being clustered. Initially, each object is assigned to its own cluster and then the algorithm proceeds iteratively, at each stage joining the two most similar clusters, continuing until there is just a single cluster.
+
+```{r}
+library(ggplot2)
+library(GGally)
+library(fpc)
+library(vegan)
+
+?hclust
+?vegdist
+```
+
+## Dissimilarity Indices for Community Ecologists
+
+The vegdist function in the vegan package computes dissimilarity indices that are popular with community ecologists. The function has the form:
+
+vegdist(x, method = "bray", ...)
+
+- x: the data matrix (Our data frame has one row for each of the thirty prairies. We will select the columns corresponding to the 44 types of insects, but we will only use data on the coleoptera beetles in columns 5 through 16.)
+- method: specifies the distance or dissimilarity index. We will explore four of the 16 available options:
+    - euclidean:
+    $$d_{jk} = \sqrt {\sum_{i} (x_{ij} - x_{ik}) ^2}$$
+    - canberra:
+    $$d_{jk} = (1/NZ) \sum_{i} \frac {|x_{ij} - x_{ik}|} {|x_{ij}| + |x_{ik}|}$$
+    where $NZ$ is the number of non-zero entries
+    - bray:
+    $$d_{jk} = \frac {\sum_{i} |x_{ij} - x_{ik}|} {\sum_{i} (x_{ij} + x_{ik})}$$
+    - cao:
+    $$d_{jk} = (1/S) \sum_i [\log(n_{i}/2) - (x_{ij} \log(x_{ik}) + x_{ik} \log(x_{ij})) / n_{i}]$$
+    where $S$ is the number of species in the compared sites and $n_{i}=x_{ij}+x_{ik}$
+
+The Cao index (Cao et al. 1997) was suggested as a minimally biased index for high beta diversity and variable sampling intensity. The Cao index does not have a fixed upper limit, but can vary among sites with no shared species. The index is intended for count (integer) data, and it is undefined for zero abundances; these are replaced with an arbitrary value of 0.1. Cao et al. (1997) used log10, but the current function uses natural logarithms so that the values are approximately 2.30 times higher than with 10-based logarithms.
+
+Most dissimilarity indices in vegdist are designed for community data, and they will give misleading values if there are negative data entries. The results may also be misleading for NA or NaN if there are empty sites. In principle, you cannot study species composition without species and you should remove empty sites from community data.
+
+Reference: Cao, Y., Williams, W.P. & Bark, A.W. (1997). Similarity measure bias in river benthic Auswuchs community analysis. Water Environment Research 69, 95–106.
+
+## Distances
+
+Compute the four different distance metrics for the insect data: Euclidean, Canberra, Bray-Curtis, and Cao. Plot the distances against each other. Which distances are most similar? Which are least similar (exhibit the weakest correlation)?
+
+```{r}
+pbi.euc.dist <- vegdist(pbi[, 5:16], method = "euclidean")
+pbi.canb.dist <- vegdist(pbi[, 5:16], method = "canberra")
+pbi.bray.dist <- vegdist(pbi[, 5:16], method = "bray")
+pbi.cao.dist <- vegdist(pbi[, 5:16], method = "cao")
+ggpairs(data.frame(cbind(pbi.euc.dist, pbi.canb.dist, pbi.bray.dist, pbi.cao.dist)))
+```
+
+## Exercise 1
+
+Is the Bray distance more similar to the Canberra distances or Euclidean distances? Give a brief explanation.
+
+I would say the Bray distance is more similar to the Canberra Distance, a reason is the range and scale of values, they both use the absolute differences and normalization.
+
+## Apply Wards Method
+
+Run hierarchical clustering with Wards linkage on the Canberra and Euclidean distance matrices. Tabulate the cluster membership results for five clusters, and compute the percentage of cases that the two methods agree belong together. Write a few sentences
+comparing the results.
+
+Looking at the Dendrogram for Euclidean, it has more height that Canberra, we can look at the branches in the dendrogram.
+
+```{r}
+# Wards method with the Canberra distance
+pbi.canb.clust <- hclust(pbi.canb.dist, method = "ward.D2")
+plot(pbi.canb.clust, cex = 0.5)
+
+# Wards method with the Euclidean distance 
+pbi.euc.clust <- hclust(pbi.euc.dist, method = "ward.D2")
+plot(pbi.euc.clust, cex = 0.5)
+
+# Create five clusters for each method
+pbi$cl.canb <- cutree(pbi.canb.clust, 5)
+pbi$cl.euc <- cutree(pbi.euc.clust, 5)
+cluster_membership <- data.frame(pbi$cl.canb, pbi$cl.euc, row.names = pbi$Site)
+cluster_membership
+table(pbi$cl.canb, pbi$cl.euc)
+```
+
+## Display Clusters
+
+Plot the clusters made with the Canberra distance measure using principal component scores. Which insects are most highly correlated with the scores for PC1? PC2?
+
+```{r}
+# PCA
+pbi.pca <- prcomp(pbi[, 5:16], center = T, scale. = T)
+summary(pbi.pca)
+
+ggplot(data.frame(pbi.pca$x, cls = as.factor(pbi$cl.canb)), aes(PC1, PC2, color = cls)) +
+  geom_point() +
+  theme(aspect.ratio = 1)
+cor(pbi[, 5:16], pbi.pca$x[, 1:3])
+```
+
+Visually display the clusters using scores for canonical discriminants. Canonical discriminants are better able to separate clusters than principal components.
+
+```{r}
+plotcluster(pbi[, 5:16], pbi$cl.canb, method = "dc", cex = 1.2, pch = 16)
+```
+
+## Choose Number of Clusters
+
+Plot within/between ratios against number of clusters. Average distance within clusters / average distance between clusters.
+
+```{r}
+# Plot within/between ratios
+pbi.canb.ratio <- sapply(2:10, function(x) {
+  cluster.stats(pbi.canb.dist, clustering = cutree(pbi.canb.clust, x))$wb.ratio
+})
+ggplot(data.frame(x = 2:10, y = pbi.canb.ratio), aes(x, y)) +
+  geom_point() +
+  geom_line(data = ~ data.frame(spline(.))) +
+  labs(x = "Number of Clusters", y = "Within/Between Ratio", title = "Canberra Distance (Ward's Method)")
+```
+
+Compute the Calinski-Harabasz index for Ward's method using the Canberra distance. Plot it against the number of clusters. Places where the trend in the plot levels out indicate the number of clusters to use.
+
+```{r}
+# Plot Calinski-Harabasz index
+pbi.canb.ch <- sapply(2:10, function(x) {
+  cluster.stats(pbi.canb.dist, clustering = cutree(pbi.canb.clust, x))$ch
+})
+ggplot(data.frame(x = 2:10, y = pbi.canb.ch), aes(x, y)) +
+  geom_point() +
+  geom_line(data = ~ data.frame(spline(.))) +
+  labs(x = "Number of Clusters", y = "ch Index", title = "Canberra Distance (Ward's Method)")
+```
+
+## Exercise 2
+
+Examine the results for applying Wards method with Euclidean distances. What is a good number of clusters? Give some justification for your choice. Display your clusters with respect to principal component scores and also with respect to canonical discriminant scores.
+
+Looking at the Within/Between Ratio, I would say 3 or 4 would be a good number of clusters, this is based on the elbow method. We can see a huge jump in the Number of cluster.
+
+For Ch Index, I would also say 3 or 4 clusters. Same reason, I would use the elbow method, but look at the drop off in the beginning
+
+```{r}
+# Plot within/between ratios
+pbi.euc.ratio <- sapply(2:10, function(x) {
+  cluster.stats(pbi.euc.dist, clustering = cutree(pbi.euc.clust, x))$wb.ratio
+})
+ggplot(data.frame(x = 2:10, y = pbi.euc.ratio), aes(x, y)) +
+  geom_point() +
+  geom_line(data = ~ data.frame(spline(.))) +
+  labs(x = "Number of Clusters", y = "Within/Between Ratio", title = "Euclidean Distance (Ward's Method)")
+
+# Plot Calinski-Harabasz index
+pbi.euc.ch <- sapply(2:10, function(x) {
+  cluster.stats(pbi.euc.dist, clustering = cutree(pbi.euc.clust, x))$ch
+})
+ggplot(data.frame(x = 2:10, y = pbi.euc.ch), aes(x, y)) +
+  geom_point() +
+  geom_line(data = ~ data.frame(spline(.))) +
+  labs(x = "Number of Clusters", y = "ch Index", title = "Euclidean Distance (Ward's Method)")
+
+# Display clusters
+pbi$cl.euc <- cutree(pbi.euc.clust, 3)
+ggplot(data.frame(pbi.pca$x, cls = as.factor(pbi$cl.euc)), aes(PC1, PC2, color = cls)) +
+  geom_point() +
+  theme(aspect.ratio = 1)
+plotcluster(pbi[, 5:16], pbi$cl.euc, method = "dc", cex = 1.2, pch = 16)
+```
+
+## K-Means Clustering
+
+## Exercise 3
+
+Use k-means clustering with the number of clusters k set to four. The k-means function only lets you use Euclidean distance. What is your result? (use a different random seed in the following code.) Make a comparison with the hierarchical clustering using Euclidean distances.
+
+```{r}
+set.seed(475)  # SET SEED!
+pbi.km1 <- kmeans(pbi[, 5:16], 4)
+pbi.km1
+pbi.km1$cluster
+pbi.km1$betweenss / pbi.km1$totss
+
+# Compare k-means clustering with hierarchical clustering using Euclidean distances
+cluster_membership <- data.frame(pbi.km1$cluster, pbi$cl.euc, row.names = pbi$Site)
+cluster_membership
+table(pbi.km1$cluster, pbi$cl.euc)
+```
+
+## Exercise 4
+
+Change the random seed, which changes the initialization of the cluster centers for the k-means procedure. Compute four clusters. Are the clusters the same as Question 4?
+
+We start Looking at the the Cluster Size, the order changes but with the same values, this can change our values.
+The cluster matrices however, are very different. The seed changes the matrices. The Clustering vectors have same size but have different values where one vector has 1s in it while the other does not.
+
+```{r}
+set.seed(575)
+pbi.km2 <- kmeans(pbi[, 5:16], 4)
+pbi.km2
+pbi.km2$cluster
+pbi.km2$betweenss / pbi.km2$totss
+
+# Compare k-means clustering under two different random seeds
+cluster_membership <- data.frame(pbi.km1$cluster, pbi.km2$cluster, row.names = pbi$Site)
+cluster_membership
+table(pbi.km1$cluster, pbi.km2$cluster)
+```
+
+Run k-means clustering for several numbers of clusters and plot the clusters with respect to canonical discriminant scores.
+
+```{r}
+# Plot betweenSS/totalSS ratios
+kmratio <- sapply(2:10, function(x) {
+  pbi.km <- kmeans(pbi[, 5:16], x)
+  pbi.km$betweenss / pbi.km$totss
+})
+ggplot(data.frame(x = 2:10, y = kmratio), aes(x, y)) +
+  geom_point() +
+  geom_line(data = ~ data.frame(spline(.))) +
+  labs(x = "Number of Clusters", y = "betweenSS/totalSS", title = "K-means Clustering")
+
+# Plot the clusters using scores for canonical discriminants
+plotcluster(pbi[, 5:16], pbi.km2$cluster, method = "dc", cex = 1.2, pch = 16)
+```
+
+## Apply Multi-Dimensional Scaling (MDS)
+
+Apply multidimensional scaling with Euclidean Distances.
+
+```{r}
+D <- vegdist(pbi[, 5:16], method = "euclidean")
+X <- cmdscale(D, k = 9, eig = T)
+X
+```
+
+# Compute the PM1 criteria
+
+```{r}
+pm1 <- cumsum(abs(X$eig)) / sum(abs(X$eig))
+pm1
+```
+
+It appears that 2-dimensional coordinates provide a good approximation. Create a plot.
+
+```{r}
+ggplot(data.frame(X$points, label = pbi$Site), aes(X1, X2, label = label)) +
+  geom_point() +
+  ggrepel::geom_text_repel(size = 2.5) +
+  labs(x = "Coordinate 1", y = "Coordinate 2", title = "MDS with Euclidean Distances")
+```
+
+## Exercise 5
+
+Apply multidimensional scaling with Canberra distances. Plot the data by the first two components from multidimensional scaling, and colored by the hierarchical clustering result using the Canberra distance.
+
+```{r}
+D <- vegdist(pbi[, 5:16], method = "canberra")
+X <- cmdscale(D, k = 9, eig = T)
+
+ggplot(data.frame(X$points, label = pbi$Site, cls = as.factor(pbi$cl.canb)), aes(X1, X2, label = label, color = cls)) +
+  geom_point() +
+  ggrepel::geom_text_repel(size = 2.5) +
+  labs(x = "Coordinate 1", y = "Coordinate 2", title = "MDS with Canberra Distances")
+```

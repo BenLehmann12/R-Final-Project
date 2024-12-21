@@ -1,0 +1,330 @@
+---
+title: "Lab9"
+author: "Ben Lehmann, Zachary Picchietti"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# *You may help each other, but please do it QUITELY.*
+
+## Life Expectancy Data
+
+The data file posted as life.csv contains data on life expectancies in the 1960's at four points in the lives of men and women in various countries (Chapter 5 of Everitt and Hothorn).
+
+- m0: life expectancy for newborn males
+- m25: life expectancy for 25 year old men
+- m50: life expectancy for 50 year old men
+- m75: life expectancy for 75 year old men
+- w0: life expectancy for newborn females
+- w25: life expectancy for 25 year old women
+- w50: life expectancy for 50 year old women
+- w75: life expectancy for 75 year old women
+
+```{r}
+library(ggplot2)
+library(GGally)
+
+life <- read.csv("life.csv", row.names = 1)
+head(life)
+str(life)
+
+# Standardize data
+lifestd <- scale(life, center = T, scale = T)
+ggpairs(data.frame(lifestd), lower = list(continuous = "smooth"))
+lifecor <- cor(life)
+lifecor
+```
+
+## Use Principal Component Estimation for Factor Loadings
+
+We will perform a factor analysis on the sample correlation matrix.
+
+```{r}
+# First do a principal component analysis
+lifepc <- prcomp(life, center = T, scale. = T)
+summary(lifepc)
+
+# Scree plot for principal components
+ggplot(data.frame(x = 1:ncol(life), y = lifepc$sdev ^ 2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Component Number", y = "Component Variance (eigenvalue)", title = "Scree Plot")
+
+# Display coefficients for principal components (eigenvectors)
+lifepc$rotation
+
+# Compute factor loadings for factors using principal components from the sample correlation matrix
+lifepc$loadings <- lifepc$rotation %*% diag(lifepc$sdev)
+lifepc$loadings
+```
+
+Apply the varimax rotation to the two factor model estimated with principal components. Print the loadings. Compute communalities and uniquenesses for each variable. Compute factor scores for the two factor model.
+
+```{r}
+# (1) Apply the varimax rotation to the 3-factor model (have a try)
+varimax(lifepc$loadings[, 1:3])
+
+# (2) Apply the varimax rotation to the 2-factor model
+lpcv <- varimax(lifepc$loadings[, 1:2])
+print(lpcv$loadings, cutoff = 0)
+
+# Compute communalities and uniquenesses for each variable
+lpcv.com <- diag(lpcv$loadings %*% t(lpcv$loadings))  # or: rowSums(lpcv$loadings ^ 2)
+lpcv.uniq <- diag(lifecor) - lpcv.com
+
+# Display in a summary table
+lpcvtable <- cbind(lpcv$loadings, lpcv.com, lpcv.uniq)
+colnames(lpcvtable) <- c("Factor1", "Factor2", "Communality", "Uniqueness")
+lpcvtable
+
+# Compute factor scores for the 2-factor model
+lpcvscore <- lifestd %*% solve(lpcv$loadings %*% t(lpcv$loadings) + diag(lpcv.uniq)) %*% lpcv$loadings
+lpcvscore
+
+# Plot the scores for the two rotated factors
+ggplot(data.frame(lpcvscore, name = abbreviate(rownames(life), 9)), aes(X1, X2, label = name)) +
+  geom_text() +
+  labs(x = "Factor 1", y = "Factor 2", title = "Varimax Rotated Factors")
+```
+
+## Maximum likelihood estimation of factor loadings
+
+This assumes normal distributions for the variables and the factor scores. The likelihood ratio test for the number of factors also assumes normality. This analysis prevents the rotation of the loadings (the default is a varimax rotation).
+
+```{r}
+# Compute p-values for tests for numbers of factors
+sapply(1:3, function(f) factanal(life, factors = f)$PVAL)
+
+# (1) 3-factor model with no rotation. Factor scores are not computed (default)
+factanal(life, factors = 3, rotation = "none")
+
+# (2) 3-factor model with varimax rotation (default). Compute factor scores using regression method
+life_varimax <- factanal(life, factors = 3, rotation = "varimax", scores = "regression")
+life_varimax
+
+# Print all of the loading values
+print(life_varimax$loadings, cutoff = 0)
+
+# Plot factor scores
+scores <- life_varimax$scores
+scores
+ggpairs(data.frame(scores), mapping = aes(label = abbreviate(rownames(life), 9)),
+        lower = list(continuous = function(data, mapping) ggplot(data, mapping) + geom_text(size = 2)))
+
+# (3) 2-factor model with varimax rotation
+life_varimax2 <- factanal(life, factors = 2, rotation = "varimax", scores = "regression")
+life_varimax2
+```
+
+## Pain Data
+
+The sample correlation matrix shown below was obtained from data collected on responses to nine statements about pain made by a sample of 123 people suffering from extreme pain (Everitt and Hothorn, page 160). The response to each statement was scored on a six point scale from 1=strong disagreement to 6=strong agreement. The nine statements are:
+
+1. Whether or not I am in pain in the future depends on the skills of the doctors.
+2. Whenever I am in pain, it is usually because of something I have done or not done.
+3. Whether or not I am in pain depends of what the doctors do for me.
+4. I cannot get any help for my pain unless I go to seek medical advice.
+5. When I am in pain I know it is because I have not been taking proper exercise or eating the right food.
+6. People's pain results from their own carelessness.
+7. I am directly responsible for my pain.
+8. Relief from pain is chiefly controlled by the doctors.
+9. People who are never in pain are just plain lucky.
+
+Enter the correlations into a matrix.
+
+```{r}
+paincor <- matrix(c(1.0, -0.04, 0.61, 0.45, 0.03, -0.29, -0.30, 0.45, 0.30,
+                    -0.04, 1.00, -0.07, -0.12, 0.49, 0.43, 0.30, -0.31, -0.17,
+                    0.61, -0.07, 1.00, 0.59, 0.03, -0.13, -0.24, 0.59, 0.32,
+                    0.45, -0.12, 0.59, 1.00, -0.08, -0.21, -0.19, 0.63, 0.37,
+                    0.03, 0.49, 0.03, -0.08, 1.00, 0.47, 0.41, -0.14, -0.24,
+                    -0.29, 0.43, -0.13, -0.21, 0.47, 1.00, 0.63, -0.13, -0.15,
+                    -0.30, 0.30, -0.24, -0.19, 0.41, 0.63, 1.00, -0.26, -0.29,
+                    0.45, -0.31, 0.59, 0.63, -0.14, -0.13, -0.26, 1.00, 0.40,
+                    0.30, -0.17, 0.32, 0.37, -0.24, -0.15, -0.29, 0.40, 1.00),
+                  ncol = 9, byrow = T)
+rownames(paincor) <- colnames(paincor) <- paste0("Q", 1:9)
+paincor
+```
+
+Compute eignevalues and eigenvectors of the sample correlation matrix. Here we use the princomp function in R which accepts a covariance matrix and does not require the raw data. R will not show loadings that it believes are small enough to be ignored, although it stores all of the loading values. The following code prints all of the loading values.
+
+```{r}
+# Perform PCA using correlation matrix
+painpc <- princomp(covmat = paincor, cor = T)
+painpc$sdev ^ 2
+painpc$loadings
+print(painpc$loadings, cutoff = 0)  # prints all of the loading values
+```
+
+## Exercise 1
+
+(a) Insert the scree plot into your report. How may components are suggested by the scree plot? Explain.
+
+We use the Elbow Criterion, and this shows that between 2 and 3 components, so I would either say 3 PCs .After the second component, additional components contribute marginally to explaining the variance.
+
+```{r}
+# Draw scree plot
+ggplot(data.frame(x = 1:ncol(paincor), y = painpc$sdev ^ 2), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Component Number", y = "Component Variance (eigenvalue)", title = "Scree Plot")
+```
+
+(b) How much of the total variation is explained by the first principal component, the second principal component? How many componets are needed to explain at least 80% of the total variance?
+
+Since PC1 has 38.24% of the total Variance and PC2 has 21.4% of the Variance, we would say that the first 2 PCs would include 59.68%
+
+It would take 5 PCs to explain at least 80% of the total variance.
+
+```{r}
+summary(painpc)
+```
+
+(c) Interpret the first two factors obtained from principal component estimation. What proportion of the total variance of the standardized responses is explained by these two factors?
+
+59.58% of the total variance is captured in the first to PCs
+
+PC1: The first factor has high positive loadings on variables like Q1 (0.662), Q3 (0.695), Q4 (0.707), Q8 (0.749), and Q9 (0.586). Have low negative loadings Q2, Q5, Q6, Q7.
+
+PC2:The second factor shows high positive loadings for Q2 (0.548) and Q5 (0.695), with smaller positive contributions from Q3 (0.501) and Q6 (0.567).
+
+
+```{r}
+# Compute factor loadings for factors derived from principal components from the sample correlation matrix
+painpc$loadingf <- painpc$loadings %*% diag(painpc$sdev)
+painpc$loadingf
+
+# Calculate proportion of variance for each variable
+varpcf <- colSums(painpc$loadingf ^ 2)
+varpercent <- varpcf / sum(diag(paincor))
+cumpercent <- cumsum(varpercent)
+vartable <- rbind("SS loadings" = varpcf, "Proportion Var" = varpercent, "Cumulative Var" = cumpercent)
+vartable
+```
+
+(d) How do the columns of the loading matrix compare to the eigenvectors produced by the principal component analysis of the correlation matrix? Find the communalities and specific variances (uniquenesses) of the nine variables for the two factor model and display them in columns next to the columns of loadings on the first two factors.
+
+The columns of the loading matrix are proportional to the eigenvectors. Loadings give insights into the contribution of each original variable to the principal components, while eigenvectors describe the directions of maximum variance.
+
+
+```{r}
+# Compute communality, uniqueness for each variable
+painpc.com <- diag(painpc$loadingf[, 1:2] %*% t(painpc$loadingf[, 1:2]))  # or: rowSums(painpc$loadingf[, 1:2] ^ 2)
+painpc.uniq <- diag(paincor) - painpc.com
+
+# Display in a summary table
+painpctable <- cbind(painpc$loadingf[, 1:2], painpc.com, painpc.uniq)
+colnames(painpctable) <- c("Factor1", "Factor2", "Communality", "Uniqueness")
+painpctable
+
+painpctable[, 1:2] / painpc$loadings[, 1:2]
+```
+
+We will now perform a Varimax rotation of the loadings for two factors computed from PCs. The varimax rotation tries to create a new set of factors, that are linear combinations of the original set of factors, for which each variable has a high loading on only one factor.
+
+(e) Apply a varimax rotation to the two factors obtained from the first two principal components. By interpreting these two rotated factors, explain how these differ from two unrotated factors. What is the varimax rotation trying to accomplish?
+
+In the unrotated factors, loadings are distributed across factors, leading to several variables showing moderate loadings on multiple factors. This could obscure the specific relationships between variables and their respective factors which is hard to interpret.
+
+After applying Varimax factors, the factor loadings tend to be more concentrated, with each variable loading heavily on one factor and minimally on others. This makes it easier to interpret the factors and patterns.
+
+```{r}
+painpc.2f <- varimax(painpc$loadingf[, 1:2])
+painpc.2f$loadings
+```
+
+(f) Evaluate the varimax rotation of the four factors corresponding to the first four principal components. Is the varimax rotation better able to achieve its main objective when four factors are rotated than when two factors are rotated? Explain.
+
+Two-factors: Cumulative Variance = 59.7%
+Four-factors: Cumulative Variance = 78.5%
+
+The four-factor solution explains more variance than the two-factor solution, indicating that it captures more of the underlying structure in the data.
+
+The varimax rotation does better with the four-factor solution than with the two-factor solution. This is true from the clear structure of loadings and the higher cumulative variance explained
+
+```{r}
+painpc.4f <- varimax(painpc$loadingf[, 1:4])
+painpc.4f$loadings
+```
+
+(g) Interpret the four rotated factors.
+
+Factor 1: This factor has strong positive loadings for Q1, Q3, Q4, and Q8, There is a strong relationship with this factor.
+
+Factor 2: Factor 2 has a very high loading from Q2 and and moderate to strong loading from Q5, indicates a strong positive relationship with this factor
+
+Factor 3: Factor 3 has negative loadings primarily associated with Q6, Q7, indicating an inverse relationship. This factor could be interpreted as a negative construct, perhaps relating to challenges
+
+Factor 4: Factor 4 has weaker loadings with Q5, Q9 (negative), which might indicate that it is less distinct or influential compared to the other factors. It could potentially capture less common themes or nuances that do not strongly correlate with the other factors.
+
+## Maximum Likelihood Estimation of Factor Loadings
+
+Fit a factor analysis model using maximum likelihood estimation and a varimax rotation. Set the number of factors to 2.
+
+## Exercise 2
+
+(a) How much of the total variation in the standardized responses is explained by each of the two rotated factors?
+
+49.9%
+
+```{r}
+mlefact2 <- factanal(covmat = paincor, factors = 2, n.obs = 123, rotation = "varimax")
+mlefact2
+```
+
+(b) How much of the total variation in the standardized responses is explained by two factors together? How does this compare to the amount of total variance explained by the first two principal components?
+
+59.6% of the two factors together. This cumulative proportion is greater thatn the cumulative proportion of the two Factors.
+
+```{r}
+summary(painpc)  # previous PCA results
+```
+
+(c) Report the loadings, communalities, and specific variances (uniquenesses) for the two varimax rotated factors obtained from maximum likelihood estimation as columns in a table or matrix. Which standardized response has the largest proportion of its variation explained by the two factors? Which has the least?
+
+Q3: Communality = 0.6815
+Q9: Communality = 0.2337
+
+```{r}
+# Compute communalities, and display in a summary table
+mlefact2.com <- diag(mlefact2$correlation) - mlefact2$uniquenesses  # or: rowSums(mlefact2$loadings ^ 2)
+factable <- cbind(mlefact2$loadings, mlefact2.com, mlefact2$uniquenesses)
+colnames(factable) <- c("Factor1", "Factor2", "Communality", "Uniqueness")
+factable
+```
+
+(d) Interpret the two varimax rotated factors.
+
+Factor 1: Q3 (0.83) and Q4 (0.74) have strong positive loadings, indicating that they are closely related to Factor1.
+Q1 (0.66) and Q8 (0.74) also have significant positive loadings.
+
+Factor 2:Q6 (0.79) and Q5 (0.65) show strong positive loadings, suggesting a strong association with Factor2.
+Q2 (0.54) and Q7 (0.69) also indicate meaningful relationships.
+
+
+(e) Compare the communalities and uniquenesses for two factors obtained from the principal component method for estimating factor loadings and from the maximum likelihood estimation of factor loadings. Which method produces factors that explain a larger proportion of the variances of the standardized responses?
+
+The principal component method likely produces higher average communalities, meaning it explains a larger proportion of the variances in the standardized responses compared to the maximum likelihood estimation method.
+
+```{r}
+painpctable  # previous FA results
+```
+
+(f) Compute p-values for likelihood ratio test of the null hypothesis that a specific number of factors is adequate. Based on the likelihood ratio tests, how many factors are needed? Explain.
+
+We would say 2 factor would be needed,  Since the third test indicates a p-value close to 0.05, you may consider testing with 2 or 3 factors for further analysis. However, it appears that having 2 factors is sufficient according to the tests performed.
+
+```{r}
+# Compute p-values from 1-factor model to 5-factors model
+sapply(1:5, function(f) factanal(covmat = paincor, factors = f, n.obs = 123)$PVAL)
+```
+
+```{r}
+# Compute the residual matrix
+mlefact2.res <- mlefact2$correlation - (mlefact2$loadings %*% t(mlefact2$loadings) + diag(mlefact2$uniquenesses))
+mlefact2.res
+```

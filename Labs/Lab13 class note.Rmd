@@ -1,0 +1,240 @@
+---
+title: "Lab13"
+author: "Ben Lehmann and Zachary Picchietti"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Logistic Regression (Alcohol Abuse Study)
+```{r}
+crim <- read.table("crimeR.dat", header = F,
+                   col.names = c("ID", "result", "age", "sex", "educ", "emotion", "etreat", "living",
+                                 "atreat", "alcadd", "health", "finance", "marriage", "pdrink", "sibs",
+                                 "work", "wages", "jobs", "dage", "dfreq", "stop", "dry","drugs"))
+head(crim)
+
+# Create binary variables from categorical variables
+crim$e1 <- 0
+crim$e1[crim$educ == 1] <- 1
+crim$e2 <- 0
+crim$e2[crim$educ == 2] <- 1
+crim$e3 <- 0
+crim$e3[crim$educ == 3] <- 1
+crim$m1 <- 0
+crim$m1[crim$marriage == 1] <- 1
+crim$m2 <- 0
+crim$m2[crim$marriage == 2] <- 1
+crim$m3 <- 0
+crim$m3[crim$marriage == 3] <- 1
+crim$L1 <- 0
+crim$L1[crim$living == 1] <- 1
+crim$L2 <- 0
+crim$L2[crim$living == 2] <- 1
+crim$L3 <- 0
+crim$L3[crim$living == 3] <- 1
+crim$L4 <- 0
+crim$L4[crim$living == 4] <- 1
+
+# Transform the binary response variable to take values 0 for success and 1 for failure
+crim$result <- crim$result - 1
+head(crim)
+```
+
+## Exercise 1
+
+When I look at the boxplot, I see that variables like age, jobs, wages, sibs seem to provide the most distinction between the two groups based on their medians, ranges, and distribution differences.
+
+the categorical variables Sex, pdrink and stop show not much difference, atreat,living, dfreq, educ shows some difference, drugs show some but not too much of a difference.
+
+```{r}
+# Box plots only for continuous variables
+library(ggplot2)
+library(reshape2)
+col.continuous <- c(3, 6, 10, 15, 17, 18, 19, 22)
+qplot(factor(result), value, data = melt(crim, id.vars = 1:2, measure.vars = col.continuous),
+      geom = "boxplot", na.rm = T) +
+  facet_wrap("variable", nrow = 2, scales = "free_y") +
+  labs(x = "result", y = NULL)
+
+# Mosaic plots for categorical variables
+library(ggmosaic)
+library(gridExtra)
+col.categorical <- c(4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 20, 21, 23)
+plist <- lapply(col.categorical, function(i) {
+  ggplot(data.frame(result = factor(crim$result), value = crim[, i])) +
+    geom_mosaic(aes(x = product(value), fill = result), show.legend = F, na.rm = T) +
+    labs(x = names(crim)[i]) + theme(axis.title.y = element_blank())
+})
+grid.arrange(grobs = plist, nrow = 3)
+```
+
+```{r}
+# Model with all variables
+crim1 <- glm(result ~ age + sex + e1 + e2 + e3 + emotion + etreat + L1 + L2 + L3 + L4 +
+               atreat + alcadd + health + finance + m1 + m2 + m3 + pdrink + sibs +
+               work + wages + jobs + dage + dfreq + stop + dry + drugs,
+             family = binomial, data = crim)
+crim1$coef
+```
+
+## Exercise 2
+Started with (88,33) then goes to (61,33) so we removed 27 rows of data
+```{r}
+crimc <- na.omit(crim)
+dim(crim)
+dim(crimc)
+```
+
+## Exercise 3
+
+Crime 1
+crim1class
+     0  1      (5+5)/(22+29) = 0.19
+  0 22  5
+  1  5 29
+  
+resultcv2
+     0  1
+  0 12 15      (15+14)/(19+12) = 0.93
+  1 14 19
+
+crim6class
+     0  1      (13+4)/(18+43) = 0.27
+  0 18 13
+  1  4 43
+  
+resultcv3
+     0  1      (20+15)/(11+32) = 0.81
+  0 11 20
+  1 15 32
+  
+crim7class
+     0  1
+  0 15 16      (16+7) / (40+15) = 0.41
+  1  7 40
+  
+resultcv4
+     0  1
+  0 11 20     (20+13)/(34+11) = 0.73
+  1 13 34
+```{r}
+source("crossval2.R")
+
+# 1. Model 1 (drop some variables)
+crim1 <- glm(result ~ age + sex + emotion + etreat + L1 + L2 + L3 + L4 +
+               atreat + alcadd + health + finance + m1 + m2 + m3 + pdrink +
+               sibs + work + wages + jobs + dage + dfreq + stop + dry + drugs,
+             family = binomial, data = crimc)
+crim1$coef
+summary(crim1)
+
+# (1) Training error rate of model 1
+crim1class <- as.numeric(predict(crim1) > 0)
+table(crimc$result, crim1class)
+
+# (2) Cross validation error rate of model 1
+resultcv2 <- crossval2(crimc[, c(3:4, 6:7, 9:12, 14:23, 27:33)], crimc$result)
+table(crimc$result, resultcv2)
+
+
+# 2. Model 2 (variables choosed by stepwise selection with backward direction)
+crim2 <- step(crim1, direction = "backward")
+crim2$coef
+# Make a data with just the variables used in the model and remove missing values
+crimc2 <- na.omit(subset(crim, select = c("age", "etreat", "L2", "atreat", "health",
+                                          "pdrink", "wages", "dfreq", "sibs", "result")))
+nrow(crimc2)
+crim6 <- glm(result ~ age + etreat + L2 + atreat + health + pdrink +
+               sibs + wages + dfreq, family = binomial, data = crimc2)
+
+# (1) Training error of model 2
+crim6class <- as.numeric(predict(crim6) > 0)
+table(crimc2$result, crim6class)
+
+# (2) Cross validation error of model 2
+resultcv3 <- crossval2(crimc2[, -10], crimc2$result)
+table(crimc2$result, resultcv3)
+
+
+# 3. Model 3 (variables choosed by stepwise selection with both direction)
+crim3 <- glm(result ~ age, family = binomial, data = crimc)
+crim4 <- step(crim3, direction = "both",
+              scope = list(upper = ~ age + sex + emotion + etreat + L1 + L2 + L3 + L4 +
+                             atreat + alcadd + health + finance + m1 + m2 + m3 + pdrink +
+                             sibs + work + wages + jobs + dage + dfreq + stop + dry + drugs,
+                           lower = ~ 1), trace = F)
+crim4$coef
+# Make a data with just the variables used in the model and remove missing values
+crimc3 <- na.omit(subset(crim, select = c("age", "etreat", "sibs", "wages",
+                                          "atreat", "m1", "L2", "sex","result")))
+nrow(crimc3)
+crim7 <- glm(result ~ age + etreat + sibs + wages + atreat + m1 + L2 + sex,
+             family = binomial, data = crimc3)
+
+# (1) Training error of model 3
+crim7class <- as.numeric(predict(crim7) > 0)
+table(crimc3$result, crim7class)
+
+# (2) Cross validation error of model 3
+resultcv4 <- crossval2(crimc3[, -9], crimc3$result)
+table(crimc3$result, resultcv4)
+```
+
+## Classification Trees (Bronchopulmonary Dysplasia (BPD) Study)
+```{r}
+bpdr <- read.csv("bpd.csv")
+head(bpdr)
+bpdr$sex <- as.factor(bpdr$sex)
+bpdr$rds <- as.ordered(bpdr$rds)
+
+# Create a factor to distinguish the two populations with labels "BPD" and "No BPD"
+bpdr$y[bpdr$bpd == 1] <- "BPD"
+bpdr$y[bpdr$bpd == 2] <- "No BPD"
+bpdr$y <- as.factor(bpdr$y)
+head(bpdr)
+
+# Fit a classification tree
+library(rpart)
+set.seed(123)
+bpd.rp <- rpart(y ~ sex + yob + gest + bwt + agsym + agven + intub + ventl + lowo2 + medo2 + hio2 + rds,
+  data = bpdr, cp = 0.0001)
+summary(bpd.rp)
+
+# Display the tree
+library(rpart.plot)
+rpart.plot(bpd.rp, extra = 1, fallen.leaves = F, digits = 4, roundint = F, main = "BPD Classification Tree")
+# or
+# par(xpd = NA)
+# plot(bpd.rp,uniform = T, main = "BPD Classification Tree")
+# text(bpd.rp, use.n = T, cex = 0.8)
+```
+
+## Exercise 4
+
+Root Node: The entire dataset of 248 instances is split here. The majority class is "No BPD" with a probability of 0.6855.
+Node 2: The dataset is split based on medo2 >= 183. There are 62 instances in this node, with the majority class being "BPD" (probability 0.8387).
+    - Node 4: For ventl >= 220, there are 48 instances, with "BPD" being the majority class (probability 0.9583). This is   terminal node.
+    - Node 5: For ventl < 220, there are 14 instances, with "No BPD" being the majority class (probability 0.5714). This is a terminal node.
+Node 3: For medo2 < 183, there are 186 instances, with "No BPD" being the majority class (probability 0.8602).
+    - Node 6: For hio2 >= 160, there are 23 instances, with "BPD" being the majority class (probability 0.5652).
+       - Node 12: For medo2 >= 45, there are 10 instances, with "BPD" being the majority class (probability 0.8000). This is a  terminal node.
+       - Node 13: For medo2 < 45, there are 13 instances, with "No BPD" being the majority class (probability 0.6154). This is a terminal node.
+    - Node 7: For hio2 < 160, there are 163 instances, with "No BPD" being the majority class (probability 0.9202).
+       - Node 14: For lowo2 >= 528, there are 13 instances, with "No BPD" being the majority class (probability 0.5385). 
+       - Node 15: For lowo2 < 528, there are 150 instances, with "No BPD" being the majority class (probability 0.9533).
+            - Node 30: For ventl >= 146, there are 41 instances, with "No BPD" being the majority class (probability 0.8293)
+                 - Node 60: For lowo2 >= 4, there are 27 instances, with "No BPD" being the majority class (probability 0.7407).
+                       - Node 120: For hio2 >= 68.5, there are 7 instances, with "BPD" being the majority class (probability 0.5714). This is a terminal node.
+                       - Node 121: For hio2 < 68.5, there are 20 instances, with "No BPD" being the majority class (probability 0.8500). This is a terminal node.
+                 - Node 61: For lowo2 < 4, there are 14 instances, all classified as "No BPD" (probability 1.0000). This is a terminal node.
+            - Node 31: For ventl < 146, there are 109 instances, all classified as "No BPD" (probability 1.0000). This is a terminal node.
+
+```{r}
+print(bpd.rp, digits = 3)                     # Brief description of what happens at each node
+bpd.prob <- predict(bpd.rp)                   # Predicted probability
+bpd.class <- predict(bpd.rp, type = "class")  # Predicted class
+table(bpdr$y, bpd.class)
+```
