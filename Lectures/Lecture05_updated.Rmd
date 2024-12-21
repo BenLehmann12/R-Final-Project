@@ -1,0 +1,238 @@
+---
+title: "Inference for two or more population means"
+author: "Pulong Ma"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(root.dir="~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+
+library(ggplot2)
+```
+
+
+# Two Processes for Manufacturing Soap
+
+```{r}
+setwd("~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+steel <- read.table(file = "./steel.dat",
+          header=F, col.names=c("temp", "yield", "strength"))
+steel
+```
+
+## Summary statistics for each treatment
+```{r}
+#  Compute sample mean vector and sample
+xbar1<-sapply(steel[steel$temp==1, -1], mean)
+xbar1
+   
+#  covariance matrix for each temperature
+xvar1<-var(steel[steel$temp==1 , -1])
+xvar1
+
+#  Compute sample mean vector and sample
+xbar2<-sapply(steel[steel$temp==2, -1], mean)
+xbar2
+   
+#  covariance matrix for each temperature
+xvar2<-var(steel[steel$temp==2 , -1])
+xvar2
+```
+
+## Scatterplot
+```{r}
+plot(steel[ ,2], steel[ ,3],
+          xlab = "Yield Point",
+          ylab = "Ultimate Strength", 
+          pch=c(1,16)[steel$temp], cex=1.5)
+    abline(lm(steel[steel$temp==1 ,3] ~ 
+		             steel[steel$temp==1 ,2]), lty=4, lwd=2)
+    abline(lm(steel[steel$temp==2 ,3] ~ 
+		             steel[steel$temp==2 ,2]), lty=1, lwd=2)
+    legend("bottomright", c("Low Temp", "High Temp"), 
+       lty = c(4, 1), lwd=2, pch = c(1, 16), merge = TRUE)
+
+```
+
+## Test for univariate normality 
+```{r}
+# for the first rolling temp
+apply(steel[steel$temp == 1, -1], 2, shapiro.test)
+
+# for the second rolling temp
+apply(steel[steel$temp == 2, -1], 2, shapiro.test)
+```
+
+## Test for bivariate normality
+```{r}
+library(mvShapiroTest) 
+mvShapiro.Test(as.matrix(steel[ , 2:3]))
+```
+
+## Test homogeneity of covariance matrices
+```{r}
+#  Apply Box's M-test to test the null hypothesis of 
+#  homogeneous covariance matrices.  This test is sensitive 
+#  to the lack of normality and has a tendency to reject
+#  the null hypothesis of homogeneous covariance matrices 
+#  just due to lack of normality.
+
+library(biotools)
+boxM(steel[ , -1], steel$temp)
+
+```
+
+## Two-sample Hotelling T-square test
+```{r}
+library(DescTools)
+
+T2result <- HotellingsT2Test(steel[steel$temp == 1, -1], 
+             steel[steel$temp == 2, -1])
+
+T2result
+```
+
+## Construct T-sqaure confidence intervals
+```{r}
+#  Compute sample sizes and number of variables
+n1 <- dim(steel[steel$temp==1, -1])[1]
+n2 <- dim(steel[steel$temp==2, -1])[1]
+p <- dim(steel[steel$temp==2, -1])[2]
+
+#  Enter the confidence level
+level <- 0.95
+
+# Compute degrees of freedom and the multipliers
+df1 <- p
+df2 <- n1+n2-p-1
+df3 <- n1+n2-2
+
+c_T2 <-  sqrt((n1+n2-2)*p*qf(level,df1,df2)/(n1+n2-p-1))
+level2 <- 1-(1-level)/2
+c_bon  <- qt(level2, df3)
+
+# Compute pooled covariance matrix 
+vpool <- ((n1-1)*xvar1 +(n2-1)*xvar2)/(n1+n2-2)
+
+#  Compute T-squared limits
+lower_limit <- (xbar1-xbar2) - c_T2*sqrt(diag(vpool)*((1/n1)+(1/n2)))
+upper_limit <- (xbar1-xbar2) + c_T2*sqrt(diag(vpool)*((1/n1)+(1/n2)))
+
+rbind(lower_limit, upper_limit)
+
+```
+
+
+## Compute Bonferroni limits
+```{r}
+lower_limit <- (xbar1-xbar2) - c_bon*sqrt(diag(vpool)*((1/n1)+(1/n2)))
+upper_limit <- (xbar1-xbar2) + c_bon*sqrt(diag(vpool)*((1/n1)+(1/n2)))
+ 
+rbind(lower_limit, upper_limit)
+
+```
+
+# MANOVA Example
+
+```{r}
+#  First enter the data into a data frame.
+setwd("~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+morel<-read.table("./morel.dat",
+                  header=F, col.names=c("studentgroup", "aptitude", 
+                                        "mathematics", "language", "generalknowledge"))
+
+#  Convert the studentgroup variable into a factor so it can be 
+#  used in models as a classification variable.
+morel$studentgroup <- as.factor(morel$studentgroup)
+
+#  Load the car library.  You will need to install the car package
+#  if you have not already done so.  Use install.packages("car") 
+
+library(car)
+
+#  Use the lm function to fit a one-way ANOVA to each of the
+#  response variables
+
+fit.lm <- lm(cbind(aptitude, mathematics, language, 
+                   generalknowledge)~studentgroup , data = morel)
+summary(fit.lm)
+
+```
+
+```{r}
+ # By default, R sets the effect for the first level of  the
+ # treatment factor equal to zero.  If we want to do the 
+ # same as SAS, we have to use the contrasts option to reset
+ # the default to set  the effect for the last level of the 
+ # treatment factor to zero.  Here is how to do it.
+ 
+ fit.lmsas <- lm(cbind(aptitude, mathematics, language, 
+             generalknowledge)~studentgroup , data = morel, 
+             contrasts = list(studentgroup = contr.SAS))
+ summary(fit.lmsas)
+
+```
+
+
+# Compute the F-test for the Wilk criterion
+```{r}
+fit.manova <- manova(fit.lm)
+fit.manova
+summary(fit.manova)
+
+```
+
+# Test for univariate normality for each student group
+```{r}
+apply(morel[morel$studentgroup == 1, -1], 2, shapiro.test)
+
+apply(morel[morel$studentgroup == 2, -1], 2, shapiro.test)
+
+apply(morel[morel$studentgroup == 3, -1], 2, shapiro.test)
+```
+
+# Construct Bonferroni confidence intervals
+```{r}
+#  Compute sample sizes and number of variables
+
+n1 <- dim(morel[morel$studentgroup==1, -1])[1]
+n2 <- dim(morel[morel$studentgroup==2, -1])[1]
+n3 <- dim(morel[morel$studentgroup==3, -1])[1]
+
+p <- dim(morel[ , -1])[2]
+g <- 3
+
+#  Enter the confidence level
+level <- 0.95
+
+# Compute Bonferroni Confidence Intervals
+# for each student population
+m <- p*g*(g-1)/2
+level2 <- 1-(1-level)/(2*m)
+df <- n1+n2+n3-g 
+c_bon  <- qt(level2, df)
+
+# Compute pooled covariance matrix 
+# vpool <- fit.manova$SSPE/df ## The variable SSPE is no longer available, we need to use the following way to get the pooled covariance matrix
+vpool = summary(fit.manova)$SS$Residuals / df
+
+# Compute Bonferroni limits
+
+xbar1<-sapply(morel[morel$studentgroup==1, -1], mean)
+xbar2<-sapply(morel[morel$studentgroup==2, -1], mean)
+xbar3<-sapply(morel[morel$studentgroup==3, -1], mean) 
+
+
+lower_limit_1v2 <- (xbar1-xbar2) - c_bon*sqrt(diag(vpool)*((1/n1)+(1/n2)))
+upper_limit_1v2 <- (xbar1-xbar2) + c_bon*sqrt(diag(vpool)*((1/n1)+(1/n2)))
+lower_limit_1v3 <- (xbar1-xbar3) - c_bon*sqrt(diag(vpool)*((1/n1)+(1/n3)))
+upper_limit_1v3 <- (xbar1-xbar3)  + c_bon*sqrt(diag(vpool)*((1/n1)+(1/n3)))
+lower_limit_2v3 <- (xbar2-xbar3) - c_bon*sqrt(diag(vpool)*((1/n2)+(1/n3)))
+upper_limit_2v3 <- (xbar2-xbar3)  + c_bon*sqrt(diag(vpool)*((1/n2)+(1/n3)))
+ 
+rbind(lower_limit_1v2, upper_limit_1v2, lower_limit_1v3, upper_limit_1v3,  lower_limit_2v3, upper_limit_2v3)
+
+```
