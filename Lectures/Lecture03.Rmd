@@ -1,0 +1,94 @@
+---
+title: "Multivariate Normal Distribution"
+author: "Pulong Ma"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(root.dir="~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+
+library(ggplot2)
+#setwd("~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+```
+
+# Stiffness of boards
+
+```{r}
+# load the data
+setwd("~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+boards <-read.table(file="./board.stiffness.dat",header=F)
+
+boards.var <- c('board','x1','x2','x3','x4')
+names(boards) <- boards.var
+```
+
+## Compute sample correlation/covariance matrix
+```{r}
+bcorr <- cor(boards[ ,2:5])
+print(bcorr)
+
+bvar <- var(boards[ ,2:5])
+print(bvar)
+```
+
+## Create a scatterplot matrix
+```{r}
+pairs(boards[ ,2:5])
+```
+
+## Create a normal probability plot
+```{r}
+par(mfrow=c(2,2),pch=5)
+for (i in 2:ncol(boards)){
+  qqnorm(boards[,i], main="Normal Q-Q Plot") 
+}
+```
+
+## Compute the Shapiro-Wilk test statistic for each variable
+```{r}
+apply(boards[ ,2:5],2,shapiro.test)
+```
+
+
+# Test multivariate normality
+
+## Compute Shapiro-Wilk test for multivariate normality
+```{r}
+# install.packages("mvShapiroTest")
+library(mvShapiroTest)
+mvShapiro.Test(as.matrix(boards[ , 2:5]))
+```
+
+## Generate random samples from a multivariate normal distribution
+```{r}
+set.seed(4750)
+library(MASS)
+xsigma <- matrix(c(1, -0.5, -0.5, 1),  ncol=2,byrow=T)
+sim.mvn <- data.frame(mvrnorm(n=100, mu=c(0,0), Sigma=xsigma))
+head(sim.mvn)
+mvShapiro.Test(as.matrix(sim.mvn))
+```
+
+
+# Compute eigenvectors and eigenvalues of the sample covariance matrix
+```{r}
+evbar = eigen(bvar)
+print(evbar)
+```
+
+# Outlier detection
+```{r}
+## Finding mahalanobis distance
+xbar = colMeans(boards[,2:5])
+dsq = mahalanobis(x=boards[,2:5], center=xbar, cov=bvar)
+
+## Cutoff value for distances from a chisquare distribution
+cutoff = qchisq(p=0.95, df=nrow(bvar)) # 95th percentile 
+
+## plot observations whose distance is greater than cutoff value
+boards[dsq>cutoff,]
+
+```
