@@ -1,0 +1,604 @@
+---
+title: "Principal Component Analysis"
+author: "Pulong Ma"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(root.dir="~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+
+library(ggplot2)
+library(readxl)
+rm(list=ls())
+```
+
+# Motivating Example
+# Use PCA to compress an image
+```{r}
+library(jpeg)
+#the jpeg has 3 channels: red,green, blue
+#for simplicity of the example, I am only
+#reading the green channel
+dat <- readJPEG("./figures/Hakone_torii.jpeg")[,,2]
+#You can have a look at the image
+plot(1:2, type='n', axes=F, ann=F)
+rasterImage(dat, 1, 2, 2, 1)
+```
+
+```{r}
+# An image is a matrix of pixels with values that represent the intensity of the the pixel, where 0=white and 1=black
+dim(dat)
+library(gplots)
+
+#color for the heatmap
+col.correlation <- colorRampPalette(c("red","yellow","darkgreen"), 
+                                    space = "rgb")(30)
+# This is time consuming 
+# heatmap.2(cor(dat), 
+#           Rowv = F, Colv = F, 
+#           dendrogram = "none",
+#           trace="none", 
+#           col=col.correlation)
+```
+
+```{r}
+# PCA
+dat.pca = prcomp(dat, center=FALSE)
+
+#  compute proportion of total variance explained by 
+#  each component
+    
+#tmp = summary(dat.pca)
+
+# produce a scree plot
+
+plot(dat.pca$sdev[1:20]^2, xlab="Component Number",
+     ylab="Component Variance (eigenvalue)",
+     main="Scree Diagram", type="b")
+
+
+#The intensities given by the first 10 components
+dat.pca2 <- dat.pca$x[,1:10] %*% t(dat.pca$rotation[,1:10])
+dat.pca2[dat.pca2>1] <-1
+dat.pca2[dat.pca2<0] <-0
+
+#You can have a look at the image
+par(mfrow=c(1,2))
+plot(1:2, type='n', axes=F, ann=F)
+title ("original")
+rasterImage(dat, 1, 2, 2, 1)
+
+plot(1:2, type='n', axes=F, ann=F)
+title("Image with 10 components from PCA")
+rasterImage(dat.pca2, 1, 2, 2, 1)
+
+
+```
+
+# Note that we are using only 10 components. Let's see the image with different number of components
+```{r}
+# Intensities with 20, 50, 80, 100 components
+dat.pca.j <- lapply(c(20, 50, 80, 100), function(j) {
+                      jcomp <- dat.pca$x[,1:j] %*% t(dat.pca$rotation[,1:j])
+                      jcomp[jcomp>1] <-1
+                      jcomp[jcomp<0] <-0
+                      return(jcomp)
+                      }
+                    )
+
+par(mfrow=c(2,2))
+plot(1:2, type='n', axes=F, ann=F)
+title ("20 components")
+rasterImage(dat.pca.j[[1]], 1, 2, 2, 1)
+
+plot(1:2, type='n', axes=F, ann=F)
+title("50 components")
+rasterImage(dat.pca.j[[2]], 1, 2, 2, 1)
+
+plot(1:2, type='n', axes=F, ann=F)
+title("80 components")
+rasterImage(dat.pca.j[[3]], 1, 2, 2, 1)
+
+plot(1:2, type='n', axes=F, ann=F)
+title("100 components")
+rasterImage(dat.pca.j[[4]], 1, 2, 2, 1)
+```
+
+
+# Compression for the colored image
+```{r}
+dat <- readJPEG("./figures/Hakone_torii.jpeg")
+
+# dat is now a list with three elements 
+#corresponding to the channels RBG
+#we will do PCA in each element
+dat.rbg.pca<- apply(dat, 3, prcomp, center = FALSE) 
+
+#Computes the intensities using 50 components
+dat.pca2 <- lapply(dat.rbg.pca, function(channel.pca) {
+                      jcomp <- channel.pca$x[,1:50] %*% t(channel.pca$rotation[,1:50])
+                      jcomp[jcomp>1] <-1
+                      jcomp[jcomp<0] <-0
+                      return(jcomp)})
+
+#Transforms the above list into an array
+dat.pca2<-array(as.numeric(unlist(dat.pca2)), 
+               dim=dim(dat))
+
+
+#You can have a look at the image
+par(mfrow=c(1,2))
+plot(1:2, type='n', axes=F, ann=F)
+title ("original")
+rasterImage(dat, 1, 2, 2, 1)
+plot(1:2, type='n', axes=F, ann=F)
+title ("50 components")
+rasterImage(dat.pca2, 1, 2, 2, 1)
+```
+
+
+MNIST Data
+===
+
+```{r}
+library(dslabs)
+mnist <- read_mnist() # A list with two components: train and test
+# Each of these is a list with two components: images and labels.
+# The images component is a matrix with each column representing one of the 28*28=784 pixels. The values are integers between 0 and 255 representing grey scale. The labels component is a vector representing the digit shown in the image.
+X = mnist$train$images[1:1000,]
+
+#i <- 5
+#image(1:28, 1:28, matrix(mnist$test$images[i,], nrow=28)[ , 28:1], 
+#    col = gray(seq(0, 1, 0.05)), xlab = "", ylab="")
+
+
+library(reshape2)
+library(ggplot2)
+
+
+plot.mnist <- function(im){
+
+  if(is.vector(im)){ # a single image
+    
+    A<-matrix(im, nr=28, byrow=F)
+    C<- melt(A, varnames = c("x", "y"), 
+             value.name = "intensity")
+    p<-ggplot(C, aes(x = x, y = y, fill = intensity))+
+      geom_tile(aes(fill=intensity))+
+      scale_fill_gradient(low='white', high='black')+
+      scale_y_reverse()+theme(
+        strip.background = element_blank(),
+        strip.text.x = element_blank(),
+        panel.spacing = unit(0, "lines"),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()
+      ) 
+  }
+  else{
+    if (dim(im)[2]!=784){
+      im = t(im)
+    } 
+    n <- dim(im)[1]
+    As <- array(im, dim = c(n, 28, 28))
+    
+    Cs<- melt(As, varnames = c("image","x", "y"), 
+              value.name = "intensity")
+    p<-ggplot(Cs, aes(x = x, y = y, fill = intensity))+
+      geom_tile(aes(fill=intensity))+
+      scale_fill_gradient(low='white', high='black')+
+      facet_wrap(~ image, nrow = floor(sqrt(n))+1, 
+                 ncol = ceiling(sqrt(n))+1)+
+      scale_y_reverse()+theme(
+        strip.background = element_blank(),
+        strip.text.x = element_blank(),
+        panel.spacing = unit(0, "lines"),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()
+      ) 
+    
+  }
+  return(p)
+}
+
+plot.mnist(X[1:8,]) + xlab("") + ylab("")
+```
+
+## Plot more observations
+```{r}
+plot.mnist(X[1:500,]) + xlab("") + ylab("")
+```
+
+## PCA for MNIST Data
+```{r}
+# the option rank=2 can significantly speeds up the computation
+mnist.pca = prcomp(X, rank=2)
+Digit = as.factor(mnist$train$labels[1:1000])
+g.pca=ggplot(as.data.frame(mnist.pca$x), 
+      aes(x=PC1, y=PC2, colour=Digit, label=Digit))+
+      geom_text(aes(label=Digit))
+print(g.pca)
+```
+
+
+
+# Turtle Carapace measurements
+```{r}
+#  This file has data on both male (coded 1)  and female (coded 2) 
+#  turtles.  There is  one line of data for each turtle with four
+#  numbers on each line.  The first column has the sex code,
+#  the next three columns  provide the length, height, and
+#  width of the carapace, respectively.  
+
+setwd("~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+turtle.all <- read.table(file="turtles.dat",
+         header=F, skip=1, col.names=c("sex", "length", "width", "height"))
+
+head(turtle.all)
+
+```
+
+```{r}
+#  Select the female turtles (coded as 2) and delete 
+#  the first column.
+
+ turtle.f<-turtle.all[turtle.all[,1]=="2", -1]	
+
+#  Compute the number of female turtles
+
+   n<-dim(turtle.f)[1]
+
+#  Compute natural logs of each measurement
+
+   turtle.f <- log(turtle.f) 
+
+```
+
+
+# Create a scatter plot matrix
+```{r}
+   par(pch=5,fin=c(5,5))
+   pairs(turtle.f,labels=c("log(length)",
+         "log(width)","log(height)"),
+         panel=function(x,y){panel.smooth(x,y)
+          abline(lsfit(x,y),lty=2) })
+```
+
+## Compute principal components from the sample covariance matrix 
+```{r}
+#  This function creates a list with the following components
+#      sdev:  standard deviations of the component 
+#             scores (square roots of eigenvalues 
+#             of the sample covariance matrix)
+#  rotation:  The coefficients needed to compute 
+#             the scores (elements of eigenvectors)
+#         x:  a nxp matrix of scores
+
+turtlef.pc <- prcomp(turtle.f)
+turtlef.pc
+
+```
+
+## Compute the proportion of total variance explained by each component
+```{r}
+   s <- var(turtlef.pc$x)
+   pvar<-round(diag(s)/sum(diag(s)), digits=6)
+   cat("proportion of variance: ", pvar, fill=T)
+
+```
+
+## Compute the cumulative proportion of total variance explained by each component
+```{r}
+cpvar <- round(cumsum(diag(s))/sum(diag(s)),  digits=6)
+cat("cumulative proportion of variance: ",  cpvar, fill=T)
+
+```
+
+# Print out PC information
+```{r}
+# Print some component scores
+head(turtlef.pc$x)
+
+# Compute correlations between component scores
+# and the variables
+cor(turtle.f, turtlef.pc$x)
+
+#  Plot component scores
+plot(turtlef.pc$x[,1],turtlef.pc$x[,2], xlab="PC1",ylab="PC2")
+
+```
+
+# PCA with standardized data
+```{r}
+#  To compute principal components from the sample correlation
+#  matrix, you must first standardize the data
+
+   turtle.fs <- scale(turtle.f, center=T, scale=T)
+ 
+#  Plot standardized variables
+
+  pairs(turtle.fs,labels=c("log(length)",
+      "log(width)","log(height)"), panel=function(x,y){
+          panel.smooth(x,y) 
+            abline(lsfit(x,y),lty=2) })
+
+#  Compute principal components for the correlation matrix
+
+turtlef.cor <- var(turtle.fs)
+turtlef.cor
+
+turtlefs.pc <- prcomp(turtle.fs)
+turtlefs.pc$sdev
+
+turtlefs.pc$rotation
+
+s <- var(turtlefs.pc$x)
+pvar<-round(diag(s)/sum(diag(s)), digits=6)
+cat("proportion of variance: ", pvar, fill=T)
+
+cpvar <- round(cumsum(diag(s))/sum(diag(s)), digits=6)
+cat("cumulative proportion of variance: ", cpvar, fill=T)
+```
+
+```{r}
+#  Principal components are sometimes useful for showing differences
+#  between groups.  We will  illustrate this by displaying component
+#  scores computed from the file containing 24 female turtles
+#  (coded 2)  and 24  male turtles (coded 1).
+
+#  First establish plotting symbols (M=male  F=female)
+
+nall <- dim(turtle.all)[1]
+turtle.type <-rep("F",nall)
+turtle.type[turtle.all[ ,1]==1] <- "M"
+
+#  Compute logs of the measurements
+
+turtle.a <- log(turtle.all[ , -1])
+
+#  Compute principal components
+
+turtlea.pc <- prcomp(turtle.a) 
+
+turtlea.pc$sdev
+
+turtlea.pc$rotation
+
+#  Plot component scores
+
+plot(turtlea.pc$x[,1],turtlea.pc$x[,2],  
+     xlab="PC1: overall size",
+     ylab="PC2: length & width vs. height",type="n")
+text(turtlea.pc$x[,1],turtlea.pc$x[,2], 
+     labels=turtle.type, cex=0.75)  
+
+```
+
+
+# Visualizing contributions of each variable 
+```{r}
+library(factoextra)
+
+# component 1 vs 2
+factoextra::fviz_pca_var(turtlea.pc, col.var="steelblue") 
+
+# component 1 vs 3
+factoextra::fviz_pca_var(turtlea.pc, axes=c(1,3), col.var="steelblue") 
+
+# component 2 vs 3
+factoextra::fviz_pca_var(turtlea.pc, axes=c(2,3), col.var="steelblue") 
+
+```
+
+
+# Madison data
+```{r}
+# X_1: population (in thousands)
+# X_2: percentage with professional degrees
+# X_3: percentage employed  (over age 16)
+# X_4: government employment (percent) 
+# X_5: median home value (in hundreds of thousands of dollars) 
+madison <- matrix( c(3.397, -1.102, 4.306, -2.078, 0.027,
+                    -1.102,  9.673,  -1.513,  10.953,  1.203,
+                     4.306, -1.513,  55.626, -28.937, -0.044,
+                    -2.078, 10.953, -28.937,  89.067,  0.957,
+                     0.027,  1.203,  -0.044,   0.957,  0.319 ),
+                     ncol=5, byrow="T")
+
+#  Compute principal components from the sample covariance matrix. 
+madison.pc <- princomp(covmat=madison)
+summary(madison.pc)
+
+print(madison.pc$loadings, cutoff=0.0)
+
+# Construct a scree plot
+xpos <- 1:nrow(madison)
+plot(xpos, madison.pc$sdev^2, xlab="Component Number",
+     ylab="Component Variance", type="b",  main = "Scree Diagram")
+
+```
+
+
+- How many PCs to keep?  When using $S$, we note that we can explain about 93\% of the variability with the first two PCs. 
+- Thus, reducing the dataset from five variables to two PCs appears reasonable. 
+- The number of PCs retained will depend on the relative sizes of the eigenvalues of the covariance, or correlation, matrix, which depend on relative sizes of variances of the original traits and correlation patterns. 
+- Scree plots are sometimes useful.  
+- Interpretation is important. 
+
+# Interpretation of Principal Components
+
+Interpretation is important.  In this example, when using $S$, the  first two components focus on variation in $X_3$ and $X_4$ because  those variables have much larger variances than the other variables.
+
+- First PC is a contrast between the percentage of the 
+population employed in government jobs ($X_4$) and the
+ percentage of adults who are employed ($X_3$).  Component
+scores are large for tracts with relatively high government employment and relatively low adult employment rate.
+- Second PC is weighted sum of variables 3 and 4, with the
+ larger weight on the adult employment percentage.  This 
+component has large scores for tracts with relatively high 
+adult employment rates ($X_3$) and relative high percentages of government employment ($X_4$) 
+
+## Compute correlations between component scores and variables
+```{r}
+corrvpc <- diag(1/sqrt(diag(madison))) %*% madison.pc$loadings %*% diag(madison.pc$sdev)
+corrvpc
+```
+
+## Principal Components for a Correlation Matrix
+
+- Now consider principal components computed from R.  The data are the standardized observations $Z_{ij}=\displaystyle{\frac{X_{ij}-\bar{X}_i}{\sqrt{s_{ii}}}}$
+- The variances of the standardized observations are the same for all of the $p$ attributes measured on each subject
+- More attention is paid to correlation patterns
+- Note that the covariance matrix for the standardized variables is the correlation matrix, so we can simply analyze the sample correlation matrix
+
+```{r}
+# Compute principal components from the correlation matrix
+madison.pc2 <- princomp(covmat=madison, cor="T")
+summary(madison.pc2)
+
+print(madison.pc2$loadings, cutoff=0.0)
+
+plot(xpos, madison.pc2$sdev^2, xlab="Component Number",
+     ylab="Component Variance", type="b",
+     main = "Scree Diagram")
+
+# Compute correlations between component scores 
+# and variables
+
+corrvpc2 <- madison.pc2$loadings %*% diag(madison.pc2$sdev)
+corrvpc2
+
+```
+
+# Road race data
+```{r}
+setwd("~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+#  There is one line of data for each of 80 
+#  racers with eleven numbers on each line.  
+#  The first ten columns give the times (minutes)
+#  to complete successive 10k segments of the race.  
+#  The last column has the racer's age (in years).
+ 
+race.mat <- as.matrix(read.csv("race100k.csv", skip=1),
+               ncol=11,byrow=T)
+```
+
+## PCA 
+```{r}
+#  First compute the number of columns in the matrix
+
+p1<-dim(race.mat)[2]
+
+#  Compute sample size and the number of section times
+
+n<-dim(race.mat)[1]
+p<-p1-1
+
+par(pch=5,fin=c(5,5)) 
+choose<-c(1,2,6,10,11)
+
+pairs(race.mat[ ,choose],labels=c("0-10k time",
+                                  "10-20k time","50-60k time", "90-100k time","age"),
+      panel=function(x,y){panel.smooth(x,y) 
+        abline(lsfit(x,y),lty=2) })
+
+#  Compute principal components from the covariance matrix.  
+#  This function creates a list with the following components
+#      sdev:  standard deviations of the component scores (
+#             square roots of eigenvalues of the covariance 
+#             matrix)
+#  rotation:  The coefficients needed to compute the scores 
+#             (elements of eigenvectors)
+#         x:  a nxp matrix of scores
+
+ 
+race.pc <- prcomp(race.mat[ ,-p1])
+
+race.pc$sdev
+
+race.pc$rotation
+
+#  compute proportion of total variance explained by 
+#  each component
+    
+summary(race.pc)
+
+# produce a scree plot
+
+plot(race.pc$sdev^2, xlab="Component Number",
+     ylab="Component Variance (eigenvalue)",
+     main="Scree Diagram", type="l")
+
+
+#  plot component scores
+
+par(pch=5, fin=c(5,5))
+pairs(race.pc$x[,c(1,2,3)],labels=c("PC1","PC2","PC3"))
+
+```
+
+# PCA based on correlation matrix
+```{r}
+#  To compute principal components from a correlation matrix, 
+#  you must first standardize the data
+
+race.s <- scale(race.mat, center=T, scale=T)
+
+#  Plot standardized data
+
+choose<-c(1,2,5,10,11)
+
+pairs(race.s[ ,choose],labels=c("0-10k time",
+                                "10-20k time","50-60k time", "90-100k time", "age"),
+      panel=function(x,y){panel.smooth(x,y)
+        abline(lsfit(x,y),lty=2) })
+
+#  Compute principal components from the correlation matrix
+
+race.cor <- var(race.s)
+cat("correlation matrix for 10k splits:", fill=T)
+
+races.pc <- prcomp(race.s[ , -11])
+
+cat("standard deviations of component scores:", fill=T)
+races.pc$sdev
+
+cat("component coefficients", fill=T)
+races.pc$rotation
+
+# Compute contributions to the total variance
+
+summary(races.pc)
+
+# Produce a scree plot
+
+plot(race.pc$sdev^2, xlab="Component Number",
+     ylab="Component Variance (eigenvalue)",
+     main="Scree Diagram", type="l")
+
+```
+
+# PCA on raw data among two groups: Mature (age<40) v.s. senior (age>40)
+```{r}
+#  Use the principal component scores from the raw data 
+ #  to look for differences among mature (age < 40) and 
+ #  senior (age > 40) runners.  Mature runners will be 
+ #  indicated by "M" and senior runners will be indicated 
+ #  by "S".
+
+race.type <-rep("M",n)
+race.type[race.mat[ ,p1]>=40] <- "S"
+
+#  Plot component scores
+
+#par(fin=c(5,5))
+plot(races.pc$x[,1],races.pc$x[,2],
+     xlab="P1: Overall Time",
+     ylab="PC2: Change in Pace ",type="n")
+text(races.pc$x[,1],races.pc$x[,2],labels=race.type)  
+
+
+```
+
+

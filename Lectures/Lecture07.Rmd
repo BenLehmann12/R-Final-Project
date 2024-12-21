@@ -1,0 +1,293 @@
+---
+title: "Factor Analysis"
+author: "Pulong Ma"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(root.dir="~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+
+library(ggplot2)
+rm(list=ls())
+```
+
+
+# Motivating example
+
+In this example, we'll use six different personality traits, each assessed by a few items/questions. Factor analysis will help us reduce these traits into a smaller number of underlying factors, which can explain the relationships between the items.
+
+Let’s consider a personality questionnaire designed to measure six traits:
+
+- Openness
+- Conscientiousness
+- Extraversion
+- Agreeableness
+- Neuroticism
+- Emotional Stability
+
+Each trait is measured by several items (questions). Our goal is to use factor analysis to see if these items cluster together in ways that reveal underlying factors.
+
+
+```{r}
+# Load required packages
+#install.packages(c("psych", "ggplot2", "corrplot", "GPArotation"))
+library(psych)
+library(ggplot2)
+library(corrplot)
+library(GPArotation)
+
+# Generate mock data for 6 personality traits and 100 individuals
+set.seed(123)
+set.seed(100)
+data <- data.frame(
+  Openness_1 = rnorm(200, mean=4, sd=0.7),  # Openness
+  Openness_2 = rnorm(200, mean=3.5, sd=0.8),
+  Openness_3 = rnorm(200, mean=4, sd=0.7),
+  Conscientiousness_1 = rnorm(200, mean=3.8, sd=0.6),  # Conscientiousness
+  Conscientiousness_2 = rnorm(200, mean=4, sd=0.5),
+  Conscientiousness_3 = rnorm(200, mean=3.9, sd=0.6),
+  Extraversion_1 = rnorm(200, mean=3.2, sd=0.9),  # Extraversion
+  Extraversion_2 = rnorm(200, mean=3.5, sd=0.8),
+  Extraversion_3 = rnorm(200, mean=3, sd=0.9),
+  Agreeableness_1 = rnorm(200, mean=4.2, sd=0.5),  # Agreeableness
+  Agreeableness_2 = rnorm(200, mean=4, sd=0.6),
+  Agreeableness_3 = rnorm(200, mean=4.1, sd=0.5),
+  Neuroticism_1 = rnorm(200, mean=2.8, sd=1),  # Neuroticism
+  Neuroticism_2 = rnorm(200, mean=3, sd=0.9),
+  Neuroticism_3 = rnorm(200, mean=2.9, sd=1),
+  Emotional_Stability_1 = rnorm(200, mean=3.5, sd=0.7),  # Emotional Stability
+  Emotional_Stability_2 = rnorm(200, mean=3.6, sd=0.6),
+  Emotional_Stability_3 = rnorm(200, mean=3.7, sd=0.5)
+)
+
+
+# KMO measure
+kmo_result <- KMO(cor(data))
+kmo_result
+
+# Bartlett's test
+bartlett_result <- cortest.bartlett(cor(data), n = nrow(data))
+bartlett_result
+
+```
+
+```{r}
+# Perform factor analysis
+factor_result <- factanal(data, factors = 6, rotation = "varimax", scores="regression")
+print(factor_result, digits = 2, cutoff = 0.3)
+
+```
+
+
+```{r}
+# Plot factor loadings
+loadings <- factor_result$loadings[,1:6]
+corrplot(loadings, is.corr = FALSE, method = "circle", tl.cex = .9)
+
+```
+
+```{r}
+# Create a scree plot
+eigenvalues <- eigen(cor(data))$values
+scree_data <- data.frame(
+  Factor = 1:length(eigenvalues),
+  Eigenvalue = eigenvalues
+)
+
+ggplot(scree_data, aes(x = Factor, y = Eigenvalue)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Scree Plot") +
+  xlab("Factor") + 
+  ylab("Eigenvalue")
+
+```
+
+```{r}
+# Extract factor scores
+factor_scores <- as.data.frame(factor_result$scores)
+names(factor_scores) <- c("Factor1", "Factor2")
+
+# Scatter plot of factors
+ggplot(factor_scores, aes(x = Factor1, y = Factor2)) +
+  geom_point() +
+  ggtitle("Factor 1 vs Factor 2") +
+  xlab("Factor 1") + 
+  ylab("Factor 2")
+
+```
+
+# Life expectance data
+```{r cars}
+setwd("~/Documents/Teaching/STAT475_575/Fall2024/Data/")
+life<-read.csv("life.csv",  row.names=1)
+head(life)
+
+```
+
+## Examine the correlation matrix and scatterplot matrix
+```{r}
+lifecor <- cor(life)
+lifecor
+```
+#  Construct a scatterplot of the data
+```{r}
+pairs(life)
+```
+
+## Compute PCs and factor loadings
+
+```{r}
+lifepc <- prcomp(life, scale=T, center=T)
+summary(lifepc)
+```
+
+# produce a scree plot
+
+```{r}
+plot(lifepc$sdev^2, xlab="Component Number",
+        ylab="Component Variance (eigenvalue)",  
+        main="Scree Diagram", type="l")
+```
+
+# rotations/PCs
+```{r}
+lifepc$rotation
+```
+
+
+## Compute factor loadings for the three factors using PCs from the sample correlation matrix
+
+```{r}
+lifepc$loadings <- lifepc$rotation%*%diag(lifepc$sdev)
+lifepc$loadings
+```
+
+
+## Varimax rotation of loadings for three factors computed from PCs
+
+
+```{r}
+varimax(lifepc$loadings[ ,1:2])
+```
+
+
+## MLE 
+
+```{r}
+# Compute p-values for tests for numbers of factors
+sapply(1:3, function(f)
+    factanal(life, factors = f, method ="mle")$PVAL)
+
+# Compute loadings for a three factor model
+# with no rotation.  Factor scores are not computed.
+factanal(life, factors = 3, method ="mle", rotation="none")
+```
+
+## Factor scores
+
+Recall that we have the following orthogonal factor model 
+$$
+\mathbf{X}_i = \mu + L F_i + \epsilon_i, i=1,\ldots, n,
+$$
+where $\mathbf{X}_i$ is the $i$-the observation with $p$ variables, $L$ is an $p\times m$ matrix, $F_i$ is the $m$-by-1 vector of factor scores for $i$-th observation. Each entry in $F_i$ corresponds to one of the common factors. 
+
+Once the factor loading matrix $L$ is found using the methods introduced in class, we then need to find factor scores. 
+
+There are three common ways to estimate factor scores:
+- Ordinary Least Squares (OLS)
+- Weighted Least Squares (WLS)
+- Regression method
+
+
+# Compute factor scores with varimax rotation 
+```{r}
+# Compute variamx rotation (default)of factor loadings
+#  Factor scores are also computed using the regression (default)
+#  method
+life_varimax <- factanal(life, factors = 3, method ="mle",
+                    rotation="varimax", scores="regression")
+life_varimax
+
+# Print all of the loading values
+print(loadings(life_varimax), cutoff = 1e-05)
+
+names(life_varimax)
+life_varimax$scores
+
+```
+
+
+
+# Plot the scores
+```{r}
+scores <- life_varimax$scores
+plot(scores[,1], scores[,2], type = "n", xlab = "Factor 1",
+        ylab = "Factor 2")
+ text(scores[,1], scores[,2], abbreviate(rownames(life), 6),
+      cex = 0.8)
+ plot(scores[,1], scores[,3], type = "n", xlab = "Factor 1",
+         ylab = "Factor 3")
+ text(scores[,1], scores[,3], abbreviate(rownames(life), 6),
+       cex = 0.8)
+ plot(scores[,2], scores[,3], type = "n", xlab = "Factor 2",
+        ylab = "Factor 3")
+ text(scores[,2], scores[,3], abbreviate(rownames(life), 6),
+      cex = 0.8)
+
+```
+
+# Perform factor analysis with 2 factors
+```{r}
+life_varimax2 <- factanal(life, factors = 2, method ="mle",
+                    rotation="varimax", scores="regression")
+life_varimax2
+```
+
+
+# Measure of sampling adequacy
+```{r}
+library(psych)
+KMO(life)
+alpha(life)
+```
+
+# Factor rotaton
+
+Why do we need to perform rotation?
+- Because we wish to find a rotation such that each of the $p$ variables has a **high loading on only one factor**  
+
+Rotation methods: 
+- Varimax
+- Quartimax rotation
+- PROMAX 
+
+```{r}
+library(GPArotation)
+life_varimax <- factanal(life, factors = 3, method ="mle",
+                   rotation="varimax", scores="regression")
+print(life_varimax)
+quartimax(life_varimax$loadings)
+promax(life_varimax$loadings)
+
+# Compute the matrix of correlations between factors.
+ M <- promax(life_varimax$loadings, m=2)$rotmat
+corfac <- solve(t(M) %*% M)
+corfac
+```
+
+# Summary
+
+- How do we interpret factor loadings
+- How to estimate factor loadings?
+  - Principle component method
+  - Principle factor method
+  - Maximum likelihood method
+- How communalities can be used to assess the adequacy of a factor model?
+- Likelihood ratio test 
+- Factor rotation
+- Methods for estimating factor scores
+
+
